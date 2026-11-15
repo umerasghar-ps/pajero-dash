@@ -86,6 +86,12 @@
     .lower{grid-template-columns:1fr}
     .gauge .val{font-size:40px} .gauge .unit{top:calc(46% + 44px)}
   }
+  /* ---- bottom notes (non-urgent, e.g. fuel trim) */
+  .notes{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:6px;font-size:12px}
+  .notes:empty{display:none}
+  .note{color:var(--muted)} .note.warn{color:#d9b25c} .note.bad{color:#ff9b9c}
+  body.car .notes{margin-top:3px;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
   /* ---- water temperature bar (always visible) */
   .wt{display:flex;align-items:center;gap:8px;flex:1 1 300px;min-width:240px;max-width:560px;
     background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:4px 10px;cursor:pointer;
@@ -238,6 +244,7 @@
     </div>
   </div>
   <div class="legend"><span><i style="background:var(--muted)"></i>dashed = trip average</span><span>gaps = stopped / idling</span></div>
+  <div id="notes" class="notes"></div>
 </div>
 
 <div class="grid tiles">
@@ -888,7 +895,7 @@ function renderWater(c){
   const old = wtHist.find(h => h[0] >= now - 120);
   wtRate = old && now - old[0] >= 30 ? (c - old[1]) / ((now - old[0]) / 60) : null;
   $("wt-val").textContent = c;
-  $("wt-pct").textContent = `${Math.round(wtPct(c))}%`;
+  $("wt-pct").textContent = `needle ${Math.round(wtPct(c))}%`;
   $("wt-trend").textContent = wtRate == null ? "" : wtRate > 0.5 ? `▲ ${wtRate.toFixed(1)}/min` : wtRate < -0.5 ? `▼ ${(-wtRate).toFixed(1)}/min` : "steady";
   $("wt-fill").style.width = `${wtPct(c)}%`;
   if (c >= wt.hot){
@@ -931,13 +938,16 @@ function alerts(v){
     if (running && v.volts > 14.9) out.push(["bad", `Over-charging: ${v.volts} V`]);
     if (!running && v.volts < 12.2) out.push(["warn", `Battery ${v.volts} V with engine off — weak or discharged`]);
   }
+  // non-urgent "worth checking" notes go to the bottom line, not the top strip
+  const notes = [];
   const lt = Math.abs(v.ltft ?? 0), tot = Math.abs((v.ltft ?? 0) + (v.stft ?? 0));
-  if (lt >= 20 || tot >= 25) out.push(["bad", `Fuel trim ${fmt((v.ltft??0)+(v.stft??0),1)} % — likely vacuum leak, MAF or fuel-delivery fault`]);
-  else if (lt >= 10) out.push(["warn", `Long-term fuel trim ${fmt(v.ltft,1)} % — engine running ${v.ltft>0?"lean":"rich"}, worth checking`]);
+  if (lt >= 20 || tot >= 25) notes.push(["bad", `Fuel trim ${fmt((v.ltft??0)+(v.stft??0),1)} % — likely vacuum leak, MAF or fuel-delivery fault`]);
+  else if (lt >= 10) notes.push(["warn", `Long-term fuel trim ${v.ltft > 0 ? "+" : ""}${fmt(v.ltft,1)} % — engine running ${v.ltft>0?"lean":"rich"}, worth checking`]);
   if ((v.rpm||0) >= 6000) out.push(["warn", "High RPM"]);
   if (fuel.left != null && fuel.left < 8) out.push(["bad", `Fuel very low: about ${fmt(fuel.left,0)} L left (estimate)`]);
   else if (fuel.left != null && fuel.left < 15) out.push(["warn", `Fuel low: about ${fmt(fuel.left,0)} L left (estimate)`]);
   $("alerts").innerHTML = out.map(([c,t]) => `<div class="alert ${c}">${t}</div>`).join("");
+  $("notes").innerHTML = notes.map(([c,t]) => `<span class="note ${c}">ⓘ ${t}</span>`).join("");
 }
 function tile(id, cls){ const e = $(id); e.classList.remove("warn","bad"); if (cls) e.classList.add(cls); }
 function hms(s){ if (s==null) return "—"; const m = Math.floor(s/60); return m>=60 ? `${Math.floor(m/60)}h${String(m%60).padStart(2,"0")}` : `${m}:${String(s%60).padStart(2,"0")}`; }
