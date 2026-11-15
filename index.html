@@ -242,43 +242,83 @@ class Elm {
   }
   async connect(device){
     this.device = device;
-    const server = device.gatt.connected ? device.gatt : await device.gatt.connect();
+    step("connecting: Bluetooth link");
+    const server = device.gatt.connected ? device.gatt
+      : await withTimeout(device.gatt.connect(), 15000, "Bluetooth link");
     dbg("GATT connected");
+
+    // find the serial service: try known UUIDs one by one (some iOS browsers hang on the "all services" call)
+    step("connecting: finding serial service");
+    const services = [];
+    for (const uuid of SERVICES){
+      try { services.push(await withTimeout(server.getPrimaryService(uuid), 4000, "service " + uuid)); dbg("found service " + String(uuid)); break; }
+      catch (err){ /* not this one */ }
+    }
+    if (!services.length){
+      dbg("known services not found, listing all");
+      services.push(...await withTimeout(server.getPrimaryServices(), 8000, "service list"));
+    }
+    step("connecting: reading characteristics");
     let w = null, n = null;
-    for (const svc of await server.getPrimaryServices()){
-      for (const ch of await svc.getCharacteristics()){
+    for (const svc of services){
+      const chars = await withTimeout(svc.getCharacteristics(), 6000, "characteristics");
+      for (const ch of chars){
         const p = ch.properties;
+        dbg(`char ${ch.uuid.slice(4,8)} ${["read","write","writeWithoutResponse","notify","indicate"].filter(k => p[k]).join("/")}`);
         if (!n && (p.notify || p.indicate)) n = ch;
         if (!w && (p.write || p.writeWithoutResponse)) w = ch;
       }
       if (w && n) break;
     }
     if (!w || !n) throw new Error("adapter has no serial characteristic");
-    dbg(`write ${w.uuid.slice(4,8)} (${w.properties.writeWithoutResponse ? "no-resp" : "resp"}), notify ${n.uuid.slice(4,8)}`);
     this.w = w; this.n = n;
+    // write methods to try, best first; a method that fails or hangs is dropped for the session
+    this.writeModes = [];
+    if (w.properties.writeWithoutResponse && w.writeValueWithoutResponse) this.writeModes.push("noresp");
+    if (w.properties.write && w.writeValueWithResponse) this.writeModes.push("resp");
+    this.writeModes.push("legacy");
     activeElm = this;
     if (notifyChar && notifyChar !== n) notifyChar.removeEventListener("characteristicvaluechanged", onNotify);
     n.removeEventListener("characteristicvaluechanged", onNotify);
     n.addEventListener("characteristicvaluechanged", onNotify);
     notifyChar = n;
-    try { await n.startNotifications(); dbg("notifications on"); }
+    step("connecting: turning on notifications");
+    try { await withTimeout(n.startNotifications(), 5000, "notifications"); dbg("notifications on"); }
     catch (err){
       if (/already/i.test(err.message || "")) dbg("notifications were already on — reusing");
+      else if (/timed out/.test(err.message)) dbg("notifications call hung — continuing anyway");
       else throw err;
     }
+  }
+  async write(data){
+    while (this.writeModes.length){
+      const mode = this.writeModes[0];
+      try {
+        const p = mode === "noresp" ? this.w.writeValueWithoutResponse(data)
+                : mode === "resp" ? this.w.writeValueWithResponse(data) : this.w.writeValue(data);
+        await withTimeout(p, 2500, "write");
+        return;
+      } catch (err){
+        dbg(`write mode '${mode}' failed (${err.message}) — trying next`);
+        this.writeModes.shift();
+      }
+    }
+    throw new Error("adapter refused every write method");
   }
   async cmd(s, timeout=4000){
     this.buf = "";
     const done = new Promise(r => this.waiter = r);
-    const data = this.enc.encode(s + "\r");
-    if (this.w.properties.write && this.w.writeValueWithResponse) await this.w.writeValueWithResponse(data);
-    else if (this.w.properties.writeWithoutResponse && this.w.writeValueWithoutResponse) await this.w.writeValueWithoutResponse(data);
-    else await this.w.writeValue(data);
+    await this.write(this.enc.encode(s + "\r"));
     await Promise.race([done, sleep(timeout)]);
     this.waiter = null;
     return this.buf.replace(/>/g,"").split(/[\r\n]+/).map(x => x.trim()).filter(x => x && x !== s);
   }
 }
+
+function withTimeout(promise, ms, what){
+  return Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error(what + " timed out")), ms))]);
+}
+function step(msg){ dbg(msg); state.status = msg; render(); }
 
 // ---- on-screen connection log (helps diagnose adapters/browsers)
 const dbgLines = [];
@@ -382,10 +422,12 @@ let elm = null, running = false, demoTimer = null;
 
 async function pollLoop(){
   const e = elm;
+  step("connecting: talking to adapter");
   for (const c of ["ATZ","ATE0","ATL0","ATS0","ATH0","ATSP6","ATAT2"]){
     const r = await e.cmd(c, 3000);
     if (c === "ATZ") dbg("adapter: " + (r.join(" ") || "(no reply)"));
   }
+  step("connecting: asking the car");
   const r0 = await e.cmd("0100", 10000);
   dbg("car reply 0100: " + (r0.join(" ") || "(no reply)"));
   if (!hexblob(r0).includes("4100")) throw new Error("car did not answer — ignition on?");
@@ -426,7 +468,6 @@ async function connect(){
     await keepAwake();
     while (running){
       try {
-        state.status = "connecting…"; render();
         elm = new Elm(); await elm.connect(device);
         await pollLoop();
       } catch (err){
