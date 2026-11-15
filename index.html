@@ -60,6 +60,12 @@
   .alert.warn{background:#2a2110;border-color:#5a4313;color:#ffd27a}
   .alert.bad{background:#2c1213;border-color:#6b2224;color:#ff9b9c}
   code{font-size:12px;color:var(--muted);word-break:break-all}
+  .fuelgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:8px}
+  .btnrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .btnrow button{flex:1 1 auto;padding:8px 10px;font-size:14px}
+  #f-leftbox.warn .big{color:var(--warn)} #f-leftbox.warn .bar>i{background:var(--warn)}
+  #f-leftbox.bad .big{color:var(--bad)} #f-leftbox.bad .bar>i{background:var(--bad)}
+  #btn-retry{display:none}
   #intro{margin-bottom:12px}
   #intro p{margin:6px 0 0;color:var(--muted);font-size:13px}
   .trips{margin-top:8px;display:flex;flex-direction:column;gap:6px}
@@ -72,6 +78,7 @@
     .gauge .val{font-size:40px} .gauge .unit{top:calc(46% + 44px)}
   }
   @media (max-width:480px){
+    .fuelgrid{grid-template-columns:1fr 1fr}
     .gauges{gap:8px}
     .gauge{padding:4px}
     .gauge .val{font-size:30px} .gauge .unit{top:calc(46% + 32px);font-size:11px}
@@ -85,6 +92,7 @@
   <h1>Pajero V6 · Live</h1>
   <span id="status" class="pill down">not connected</span>
   <span class="spacer"></span>
+  <button id="btn-retry">↻ Try again</button>
   <button id="btn-connect" class="primary">Connect</button>
 </header>
 
@@ -108,6 +116,23 @@
 </div>
 
 <div id="alerts"></div>
+
+<div class="card" id="fuelcard" style="margin-top:12px">
+  <div class="row"><div class="label">Fuel</div><span class="sub" id="f-note">estimated from airflow sensor</span></div>
+  <div class="fuelgrid">
+    <div><div class="sub">Now</div><div class="big"><span id="f-now">—</span><small id="f-now-u">km/L</small></div></div>
+    <div><div class="sub">Trip average</div><div class="big"><span id="f-avg">—</span><small>km/L</small></div></div>
+    <div><div class="sub">Trip time</div><div class="big" id="f-time">—</div><div class="sub" id="f-dist">&nbsp;</div></div>
+    <div id="f-leftbox"><div class="sub">Fuel left (est.)</div><div class="big"><span id="f-left">—</span><small>L</small></div>
+      <div class="bar"><i id="f-bar"></i></div><div class="sub" id="f-range">tap “Filled up” at the pump</div></div>
+  </div>
+  <div class="btnrow">
+    <button id="btn-fill" class="primary">⛽ Filled up</button>
+    <button id="btn-setfuel">Set litres</button>
+    <button id="btn-tank">Tank: <span id="f-tank">88</span> L</button>
+    <button id="btn-resettrip">↺ Reset trip</button>
+  </div>
+</div>
 
 <div class="grid tiles">
   <div class="card tile" id="t-coolant"><div class="label">Coolant</div>
@@ -172,7 +197,7 @@
       <div class="sub" id="dtc" style="margin-top:6px">read after connecting</div>
     </div>
     <div class="card">
-      <div class="row"><div class="label">Saved trips (on this phone)</div><button id="btn-endtrip">End trip</button></div>
+      <div class="row"><div class="label">Saved trips (on this phone)</div><button id="btn-cleartrips">Clear all</button></div>
       <div class="trips" id="trips"></div>
     </div>
     <details class="card">
@@ -371,6 +396,7 @@ function update(vals){
     const dt = Math.min(now - trip.last, 5);
     trip.dist_km += speed*dt/3600;
     if (lph) trip.fuel_l += lph*dt/3600;
+    if (!state.demo) burnFuel(lph ? lph*dt/3600 : 0, speed*dt/3600, now);
     if ((v.rpm||0) > 300) trip[speed < 2 ? "idle_s" : "moving_s"] += dt;
   }
   trip.last = now;
@@ -433,7 +459,46 @@ $("trips").addEventListener("click", e => {
   if (x) exportTrip(x);
   if (d && confirm("Delete this trip from the phone?")) deleteTrip(d);
 });
-$("btn-endtrip").onclick = () => { saveTrip(); newTrip(); render(); };
+// ---- reset buttons
+$("btn-resettrip").onclick = () => {
+  if (!confirm("Start a new trip? The current one is kept in Saved trips.")) return;
+  saveTrip(); newTrip(); hist.length = 0; drawChart(); render();
+};
+$("btn-cleartrips").onclick = () => {
+  if (!loadTrips().length) return;
+  if (confirm("Delete ALL saved trips from this phone? This can't be undone.")){ storeTrips([]); renderTrips(); }
+};
+
+// ---- estimated fuel left (no tank-level sensor on this car): set at fill-up, minus fuel burned
+const FUEL_KEY = "pajero.fuel.v1";
+const DEFAULT_KMPL = 7;          // used for range until ~20 km of real data since the fill-up
+let fuel = (() => { try { return JSON.parse(localStorage.getItem(FUEL_KEY)) || null; } catch { return null; } })()
+  || { tank: 88, left: null, km: 0, l: 0, saved: 0 };
+function saveFuel(){ try { localStorage.setItem(FUEL_KEY, JSON.stringify(fuel)); } catch {} }
+function burnFuel(litres, km, now){
+  if (fuel.left == null) return;
+  fuel.left = Math.max(0, fuel.left - litres);
+  fuel.km += km; fuel.l += litres;
+  if (now - fuel.saved > 10){ fuel.saved = now; saveFuel(); }
+}
+function setFuel(litres){
+  fuel.left = Math.max(0, Math.min(fuel.tank, litres));
+  fuel.km = 0; fuel.l = 0; fuel.saved = 0; saveFuel(); render();
+}
+$("btn-fill").onclick = () => { if (confirm(`Tank filled to full (${fuel.tank} L)?`)) setFuel(fuel.tank); };
+$("btn-setfuel").onclick = () => {
+  const s = prompt(`How many litres are in the tank now? (0–${fuel.tank})\nTip: gauge at ½ ≈ ${Math.round(fuel.tank/2)} L, ¼ ≈ ${Math.round(fuel.tank/4)} L`,
+                   fuel.left != null ? Math.round(fuel.left) : "");
+  if (s === null) return;
+  const v = parseFloat(s); if (!Number.isNaN(v)) setFuel(v);
+};
+$("btn-tank").onclick = () => {
+  const s = prompt("Fuel tank size in litres (Pajero long-wheelbase ≈ 88 L, short-wheelbase ≈ 69 L — check your manual):", fuel.tank);
+  if (s === null) return;
+  const v = parseFloat(s);
+  if (v >= 20 && v <= 200){ fuel.tank = v; if (fuel.left != null) fuel.left = Math.min(fuel.left, v); saveFuel(); render(); }
+};
+window.addEventListener("pagehide", saveFuel);
 
 // ================================================================ connection + polling loop
 let elm = null, running = false, demoTimer = null;
@@ -468,8 +533,9 @@ async function pollLoop(){
   }
 }
 
+let currentDevice = null, wakeRetry = null, loopActive = false;
 async function connect(){
-  if (!navigator.bluetooth){ alert("This browser has no Web Bluetooth. On iPhone open this page in the Bluefy app."); return; }
+  if (!navigator.bluetooth){ alert("This browser has no Web Bluetooth. On iPhone open this page in Bluefy or BLE Link."); return; }
   stopDemo();
   try {
     state.status = "choose OBDII…"; render();
@@ -481,9 +547,19 @@ async function connect(){
       dbg("Bluetooth link dropped");
       state.connected = false; state.status = "disconnected — reconnecting…"; render();
     });
-    running = true; $("btn-connect").textContent = "Disconnect";
-    $("intro").style.display = "none";
-    await keepAwake();
+    currentDevice = device;
+    await runWith(device);
+  } catch (err){
+    state.status = err.name === "NotFoundError" ? "not connected" : "error: " + err.message;
+  }
+  render();
+}
+async function runWith(device){
+  if (loopActive) return;
+  loopActive = true; running = true;
+  $("btn-connect").textContent = "Disconnect"; $("intro").style.display = "none";
+  await keepAwake();
+  try {
     while (running){
       try {
         elm = new Elm(); await elm.connect(device);
@@ -492,21 +568,30 @@ async function connect(){
         console.error(err); dbg("ERROR: " + (err.message || err));
         state.connected = false; state.status = "error: " + (err.message || err).toString().slice(0,60);
       }
-      saveTrip();
-      if (running) await sleep(3000);
+      saveTrip(); render();
+      if (running) await Promise.race([sleep(3000), new Promise(r => wakeRetry = r)]);
     }
-  } catch (err){
-    state.status = err.name === "NotFoundError" ? "not connected" : "error: " + err.message;
-  }
-  render();
+  } finally { loopActive = false; }
+}
+// "Try again": drop the current link and reconnect straight away (no device picker if we already know the adapter)
+async function tryAgain(){
+  dbg("Try again pressed");
+  if (state.demo) stopDemo();
+  if (!currentDevice) return connect();
+  state.status = "retrying…"; render();
+  try { if (currentDevice.gatt.connected) currentDevice.gatt.disconnect(); } catch {}
+  if (loopActive){ if (wakeRetry) wakeRetry(); return; }
+  runWith(currentDevice);
 }
 function disconnect(){
-  running = false; saveTrip();
+  running = false; saveTrip(); saveFuel();
+  if (wakeRetry) wakeRetry();
   try { elm && elm.device.gatt.connected && elm.device.gatt.disconnect(); } catch {}
   state.connected = false; state.status = "not connected";
   $("btn-connect").textContent = "Connect"; render();
 }
 $("btn-connect").onclick = () => running ? disconnect() : connect();
+$("btn-retry").onclick = tryAgain;
 
 // keep the screen on while driving (where supported)
 let wakeLock = null;
@@ -518,7 +603,7 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
 // ---- demo mode (no car)
 function startDemo(){
   if (demoTimer) return;
-  newTrip(); state.connected = true; state.status = "DEMO"; state.rate = 6.8;
+  newTrip(); state.connected = true; state.status = "DEMO"; state.rate = 6.8; state.demo = true;
   state.dtc_raw = { stored:["43000A78000000"], pending:["4700"] };
   $("intro").style.display = "none";
   const t0 = Date.now()/1000; let cool = 45;
@@ -533,7 +618,7 @@ function startDemo(){
       lambda:1, o2v:+(0.1+Math.random()*.8).toFixed(2), ambient:41, pedal:+thr.toFixed(1), baro:101 });
   }, 250);
 }
-function stopDemo(){ if (demoTimer){ clearInterval(demoTimer); demoTimer = null; newTrip(); state.values = {}; } }
+function stopDemo(){ if (demoTimer){ clearInterval(demoTimer); demoTimer = null; newTrip(); state.values = {}; state.demo = false; state.connected = false; } }
 $("btn-demo").onclick = startDemo;
 
 // ================================================================ rendering
@@ -610,6 +695,8 @@ function alerts(v){
   if (lt >= 20 || tot >= 25) out.push(["bad", `Fuel trim ${fmt((v.ltft??0)+(v.stft??0),1)} % — likely vacuum leak, MAF or fuel-delivery fault`]);
   else if (lt >= 10) out.push(["warn", `Long-term fuel trim ${fmt(v.ltft,1)} % — engine running ${v.ltft>0?"lean":"rich"}, worth checking`]);
   if ((v.rpm||0) >= 6000) out.push(["warn", "High RPM"]);
+  if (fuel.left != null && fuel.left < 8) out.push(["bad", `Fuel very low: about ${fmt(fuel.left,0)} L left (estimate)`]);
+  else if (fuel.left != null && fuel.left < 15) out.push(["warn", `Fuel low: about ${fmt(fuel.left,0)} L left (estimate)`]);
   $("alerts").innerHTML = out.map(([c,t]) => `<div class="alert ${c}">${t}</div>`).join("");
 }
 function tile(id, cls){ const e = $(id); e.classList.remove("warn","bad"); if (cls) e.classList.add(cls); }
@@ -654,6 +741,29 @@ function render(){
   $("tr-dist").textContent = tr.dist_km != null ? `${fmt(tr.dist_km,1)} km` : "—";
   $("tr-fuel").textContent = tr.fuel_l != null ? `${fmt(tr.fuel_l,2)} L` : "—";
   $("tr-avg").textContent = tr.avg_kmpl != null ? `${fmt(tr.avg_kmpl,1)} km/L` : "—";
+
+  // ---- fuel card
+  if (v.kmpl != null){ $("f-now").textContent = fmt(v.kmpl,1); $("f-now-u").textContent = "km/L"; }
+  else if (v.lph != null){ $("f-now").textContent = fmt(v.lph,1); $("f-now-u").textContent = (v.speed||0) <= 5 ? "L/h idle" : "L/h"; }
+  else { $("f-now").textContent = "—"; $("f-now-u").textContent = "km/L"; }
+  $("f-avg").textContent = tr.avg_kmpl != null ? fmt(tr.avg_kmpl,1) : "—";
+  $("f-time").textContent = hms(tr.elapsed_s);
+  $("f-dist").textContent = tr.dist_km != null ? `${fmt(tr.dist_km,1)} km · ${fmt(tr.fuel_l,2)} L used` : "";
+  $("f-tank").textContent = fmt(fuel.tank);
+  const lb = $("f-leftbox"); lb.classList.remove("warn","bad");
+  if (fuel.left == null){
+    $("f-left").textContent = "—"; $("f-bar").style.width = "0";
+    $("f-range").textContent = "tap “Filled up” at the pump";
+  } else {
+    const pct = 100*fuel.left/fuel.tank;
+    $("f-left").textContent = fmt(fuel.left,1); $("f-bar").style.width = `${pct}%`;
+    const kmpl = fuel.km > 20 && fuel.l > 0 ? fuel.km/fuel.l : (tr.avg_kmpl && tr.dist_km > 2 ? tr.avg_kmpl : DEFAULT_KMPL);
+    const basis = fuel.km > 20 ? "since fill-up" : tr.dist_km > 2 ? "this trip" : "typical";
+    $("f-range").textContent = `≈ ${Math.round(fuel.left*kmpl)} km range · ${fmt(kmpl,1)} km/L ${basis}`;
+    if (fuel.left < 8) lb.classList.add("bad"); else if (fuel.left < 15) lb.classList.add("warn");
+  }
+  $("f-note").textContent = state.demo ? "demo — fuel left not changed" : "estimated from airflow sensor";
+  $("btn-retry").style.display = (running || currentDevice) && !st.connected && !state.demo ? "inline-block" : "none";
   $("tr-time").textContent = hms(tr.elapsed_s);
   const tot = (tr.idle_s||0) + (tr.moving_s||0);
   $("tr-idle").textContent = tot > 0 ? `${Math.round(100*tr.idle_s/tot)} %` : "—";
