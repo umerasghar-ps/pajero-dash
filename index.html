@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0b0d10">
+<title>Pajero Live</title>
+<style>
+  :root{
+    --bg:#0b0d10; --panel:#14181d; --line:#232a32; --text:#e8edf2; --muted:#8693a1;
+    --accent:#3fb6ff; --ok:#3ddc84; --warn:#ffb020; --bad:#ff4d4f; --track:#222a33;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);
+    font:15px/1.35 -apple-system,BlinkMacSystemFont,"SF Pro Text",Segoe UI,Roboto,sans-serif}
+  body{padding:max(12px,env(safe-area-inset-top)) 16px 28px;max-width:1200px;margin:0 auto}
+  header{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+  h1{font-size:18px;margin:0;font-weight:650;letter-spacing:.2px}
+  .pill{font-size:12px;padding:3px 10px;border-radius:99px;background:var(--panel);
+    border:1px solid var(--line);color:var(--muted)}
+  .pill.live{color:var(--ok);border-color:#1f5236}
+  .pill.down{color:var(--warn);border-color:#5a4313}
+  .spacer{flex:1}
+  button{font:inherit;font-weight:600;border-radius:10px;border:1px solid var(--line);
+    background:var(--panel);color:var(--text);padding:8px 14px;cursor:pointer}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#04121c}
+  button:disabled{opacity:.5}
+  .grid{display:grid;gap:12px}
+  .gauges{grid-template-columns:1fr 1fr}
+  .tiles{grid-template-columns:repeat(4,1fr);margin-top:12px}
+  .lower{grid-template-columns:1.3fr 1fr;margin-top:12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+  .label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+  .big{font-size:30px;font-weight:650;font-variant-numeric:tabular-nums;margin-top:4px}
+  .big small{font-size:14px;color:var(--muted);font-weight:500;margin-left:3px}
+  .sub{font-size:12px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
+  .gauge{position:relative;text-align:center;padding:8px 8px 4px}
+  .gauge svg{width:100%;max-width:340px;display:block;margin:0 auto}
+  .gauge .val{position:absolute;left:0;right:0;top:46%;font-size:52px;font-weight:700;
+    font-variant-numeric:tabular-nums;line-height:1}
+  .gauge .unit{position:absolute;left:0;right:0;top:calc(46% + 56px);color:var(--muted);font-size:13px}
+  .tile.warn{border-color:var(--warn)} .tile.warn .big{color:var(--warn)}
+  .tile.bad{border-color:var(--bad)} .tile.bad .big{color:var(--bad)}
+  .bar{height:8px;border-radius:5px;background:var(--track);margin-top:8px;overflow:hidden}
+  .bar>i{display:block;height:100%;background:var(--accent);width:0;transition:width .25s}
+  .trim{position:relative;height:10px;border-radius:5px;background:var(--track);margin:10px 0 4px}
+  .trim .mid{position:absolute;left:50%;top:-3px;bottom:-3px;width:2px;background:var(--muted)}
+  .trim .zone{position:absolute;top:0;bottom:0;left:30%;right:30%;background:#1e3326;border-radius:5px}
+  .trim .dot{position:absolute;top:-3px;width:16px;height:16px;border-radius:50%;
+    margin-left:-8px;background:var(--accent);border:2px solid var(--bg);transition:left .25s}
+  .row{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .kv{display:grid;grid-template-columns:repeat(3,1fr);gap:10px 12px;margin-top:8px}
+  .kv .big{font-size:22px}
+  canvas{width:100%;height:150px;display:block;margin-top:8px}
+  .legend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-top:6px;flex-wrap:wrap}
+  .legend i{display:inline-block;width:10px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle}
+  #alerts{display:flex;flex-direction:column;gap:6px;margin-top:12px}
+  .alert{padding:8px 12px;border-radius:10px;font-size:14px;border:1px solid}
+  .alert.warn{background:#2a2110;border-color:#5a4313;color:#ffd27a}
+  .alert.bad{background:#2c1213;border-color:#6b2224;color:#ff9b9c}
+  code{font-size:12px;color:var(--muted);word-break:break-all}
+  #intro{margin-bottom:12px}
+  #intro p{margin:6px 0 0;color:var(--muted);font-size:13px}
+  .trips{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+  .trips .t{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;
+    border-top:1px solid var(--line);padding-top:6px}
+  .trips button{padding:4px 10px;font-size:12px}
+  @media (max-width:820px){
+    .tiles{grid-template-columns:repeat(2,1fr)}
+    .lower{grid-template-columns:1fr}
+    .gauge .val{font-size:40px} .gauge .unit{top:calc(46% + 44px)}
+  }
+  @media (max-width:480px){
+    .gauges{gap:8px}
+    .gauge{padding:4px}
+    .gauge .val{font-size:30px} .gauge .unit{top:calc(46% + 32px);font-size:11px}
+    .big{font-size:24px}
+    .kv{grid-template-columns:repeat(2,1fr)}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Pajero V6 · Live</h1>
+  <span id="status" class="pill down">not connected</span>
+  <span class="spacer"></span>
+  <button id="btn-connect" class="primary">Connect</button>
+</header>
+
+<div class="card" id="intro">
+  <b>Phone-only dashboard.</b>
+  <p>Ignition ON, Car Scanner closed, then tap <b>Connect</b> and pick <b>OBDII</b>.
+  Needs a Web Bluetooth browser — on iPhone use <b>Bluefy</b>. Keep the screen on while driving.</p>
+  <p id="bt-support"></p>
+  <p><button id="btn-demo">Try demo data</button></p>
+</div>
+
+<div class="grid gauges">
+  <div class="card gauge">
+    <svg viewBox="0 0 200 160" id="g-speed"></svg>
+    <div class="val" id="v-speed">—</div><div class="unit">km/h</div>
+  </div>
+  <div class="card gauge">
+    <svg viewBox="0 0 200 160" id="g-rpm"></svg>
+    <div class="val" id="v-rpm">—</div><div class="unit">rpm</div>
+  </div>
+</div>
+
+<div id="alerts"></div>
+
+<div class="grid tiles">
+  <div class="card tile" id="t-coolant"><div class="label">Coolant</div>
+    <div class="big"><span id="v-coolant">—</span><small>°C</small></div>
+    <div class="sub" id="s-coolant">&nbsp;</div></div>
+  <div class="card tile" id="t-volts"><div class="label">Battery / charging</div>
+    <div class="big"><span id="v-volts">—</span><small>V</small></div>
+    <div class="sub" id="s-volts">&nbsp;</div></div>
+  <div class="card tile" id="t-fuel"><div class="label">Fuel now</div>
+    <div class="big"><span id="v-fuel">—</span><small id="u-fuel">km/L</small></div>
+    <div class="sub" id="s-fuel">&nbsp;</div></div>
+  <div class="card tile" id="t-iat"><div class="label">Intake air</div>
+    <div class="big"><span id="v-iat">—</span><small>°C</small></div>
+    <div class="sub" id="s-iat">&nbsp;</div></div>
+
+  <div class="card tile"><div class="label">Throttle</div>
+    <div class="big"><span id="v-throttle">—</span><small>%</small></div>
+    <div class="bar"><i id="b-throttle"></i></div></div>
+  <div class="card tile"><div class="label">Engine load</div>
+    <div class="big"><span id="v-load">—</span><small>%</small></div>
+    <div class="bar"><i id="b-load"></i></div></div>
+  <div class="card tile"><div class="label">Air flow (MAF)</div>
+    <div class="big"><span id="v-maf">—</span><small>g/s</small></div>
+    <div class="sub">manifold <span id="v-map">—</span> kPa</div></div>
+  <div class="card tile"><div class="label">Ignition timing</div>
+    <div class="big"><span id="v-timing">—</span><small>°</small></div>
+    <div class="sub">O₂ B1S1 <span id="v-o2v">—</span> V</div></div>
+</div>
+
+<div class="grid lower">
+  <div class="card">
+    <div class="row"><div class="label">History · last 10 min</div><code id="rate"></code></div>
+    <canvas id="chart"></canvas>
+    <div class="legend">
+      <span><i style="background:#3fb6ff"></i>Speed km/h</span>
+      <span><i style="background:#ff7a45"></i>Coolant °C</span>
+      <span><i style="background:#b37feb"></i>RPM ÷ 50</span>
+    </div>
+  </div>
+  <div class="grid" style="gap:12px">
+    <div class="card tile" id="t-trims">
+      <div class="label">Fuel trims · bank 1</div>
+      <div class="row" style="margin-top:6px"><span>Short-term</span><b id="v-stft">—</b></div>
+      <div class="trim"><div class="zone"></div><div class="mid"></div><div class="dot" id="d-stft"></div></div>
+      <div class="row" style="margin-top:6px"><span>Long-term</span><b id="v-ltft">—</b></div>
+      <div class="trim"><div class="zone"></div><div class="mid"></div><div class="dot" id="d-ltft"></div></div>
+      <div class="sub">Green band = ±10 %. Positive = ECU adding fuel (lean).</div>
+    </div>
+    <div class="card">
+      <div class="label">This trip</div>
+      <div class="kv">
+        <div><div class="sub">Distance</div><div class="big" id="tr-dist">—</div></div>
+        <div><div class="sub">Fuel used</div><div class="big" id="tr-fuel">—</div></div>
+        <div><div class="sub">Average</div><div class="big" id="tr-avg">—</div></div>
+        <div><div class="sub">Time</div><div class="big" id="tr-time">—</div></div>
+        <div><div class="sub">Idle share</div><div class="big" id="tr-idle">—</div></div>
+        <div><div class="sub">Max coolant</div><div class="big" id="tr-cool">—</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="label">Fault codes</div>
+      <div class="sub" id="dtc" style="margin-top:6px">read after connecting</div>
+    </div>
+    <div class="card">
+      <div class="row"><div class="label">Saved trips (on this phone)</div><button id="btn-endtrip">End trip</button></div>
+      <div class="trips" id="trips"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const fmt = (v, d=0) => (v === null || v === undefined || Number.isNaN(v)) ? "—" : Number(v).toFixed(d);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// ================================================================ OBD definitions
+// PID -> [key, bytes, decoder]  (only PIDs this Pajero reported as supported)
+const PIDS = {
+  0x04:["load",1,a=>a[0]*100/255],      0x05:["coolant",1,a=>a[0]-40],
+  0x06:["stft",1,a=>a[0]/1.28-100],     0x07:["ltft",1,a=>a[0]/1.28-100],
+  0x0B:["map",1,a=>a[0]],               0x0C:["rpm",2,a=>(a[0]*256+a[1])/4],
+  0x0D:["speed",1,a=>a[0]],             0x0E:["timing",1,a=>a[0]/2-64],
+  0x0F:["iat",1,a=>a[0]-40],            0x10:["maf",2,a=>(a[0]*256+a[1])/100],
+  0x11:["throttle",1,a=>a[0]*100/255],  0x14:["o2v",2,a=>a[0]/200],
+  0x1F:["runtime",2,a=>a[0]*256+a[1]],  0x33:["baro",1,a=>a[0]],
+  0x42:["volts",2,a=>(a[0]*256+a[1])/1000], 0x44:["lambda",2,a=>(a[0]*256+a[1])/32768],
+  0x46:["ambient",1,a=>a[0]-40],        0x49:["pedal",1,a=>a[0]*100/255],
+};
+const FAST = [0x0C,0x0D,0x10,0x11,0x04];
+const SLOW = [0x05,0x0F,0x42,0x06,0x07,0x0E,0x0B,0x44,0x14,0x46,0x49,0x1F,0x33];
+const PETROL_DENSITY = 745, STOICH = 14.7;
+const ADAPTER_NAME = "OBDII";
+// Service UUIDs used by common ELM327 BLE adapters (yours: FFF0 / char FFF1)
+const SERVICES = [0xfff0, 0xffe0, 0x18f0, "e7810a71-73ae-499d-8c15-faa9aef0c3f2",
+                  "49535343-fe7d-4ae5-8fa9-9fafd205e455", "6e400001-b5a3-f393-e0a9-e50e24dcca9e"];
+
+function hexblob(lines){
+  return lines.map(l => l.replace(/\s/g,"").toUpperCase())
+    .filter(l => !/^[0-9A-F]{3}$/.test(l))
+    .map(l => l.replace(/^[0-9A-F]:/,""))
+    .filter(l => /^[0-9A-F]+$/.test(l)).join("");
+}
+function parseMode01(lines, wanted){
+  const h = hexblob(lines), out = {};
+  let i = h.indexOf("41"); if (i < 0) return out; i += 2;
+  while (i + 2 <= h.length){
+    const pid = parseInt(h.slice(i,i+2),16);
+    if (!PIDS[pid] || !wanted.includes(pid) || pid in out) break;
+    const [, nb, dec] = PIDS[pid], raw = h.slice(i+2, i+2+nb*2);
+    if (raw.length < nb*2) break;
+    out[pid] = dec(raw.match(/../g).map(x => parseInt(x,16)));
+    i += 2 + nb*2;
+  }
+  return out;
+}
+
+// ================================================================ ELM327 over Web Bluetooth
+class Elm {
+  constructor(){ this.buf = ""; this.waiter = null; this.dec = new TextDecoder(); this.enc = new TextEncoder(); }
+  async connect(device){
+    this.device = device;
+    const server = await device.gatt.connect();
+    let w = null, n = null;
+    for (const svc of await server.getPrimaryServices()){
+      for (const ch of await svc.getCharacteristics()){
+        const p = ch.properties;
+        if (!n && (p.notify || p.indicate)) n = ch;
+        if (!w && (p.write || p.writeWithoutResponse)) w = ch;
+      }
+      if (w && n) break;
+    }
+    if (!w || !n) throw new Error("adapter has no serial characteristic");
+    this.w = w; this.n = n;
+    n.addEventListener("characteristicvaluechanged", e => {
+      this.buf += this.dec.decode(e.target.value);
+      if (this.buf.includes(">") && this.waiter){ const r = this.waiter; this.waiter = null; r(); }
+    });
+    await n.startNotifications();
+  }
+  async cmd(s, timeout=4000){
+    this.buf = "";
+    const done = new Promise(r => this.waiter = r);
+    const data = this.enc.encode(s + "\r");
+    if (this.w.properties.writeWithoutResponse && this.w.writeValueWithoutResponse) await this.w.writeValueWithoutResponse(data);
+    else await this.w.writeValue(data);
+    await Promise.race([done, sleep(timeout)]);
+    this.waiter = null;
+    return this.buf.replace(/>/g,"").split(/[\r\n]+/).map(x => x.trim()).filter(x => x && x !== s);
+  }
+}
+
+// ================================================================ state, trip, logging
+const state = { connected:false, status:"not connected", values:{}, trip:{}, dtc_raw:null, rate:0 };
+let trip, tripRows;
+function newTrip(){
+  trip = { start:null, last:null, dist_km:0, fuel_l:0, max_cool:null, max_speed:0, max_rpm:0, idle_s:0, moving_s:0 };
+  tripRows = []; state.trip = {};
+}
+newTrip();
+const LOG_COLS = ["time","rpm","speed","throttle","load","maf","coolant","iat","volts","stft","ltft","timing","map","lambda","o2v","lph","kmpl"];
+let lastRow = 0;
+
+function update(vals){
+  const now = Date.now()/1000, v = state.values;
+  Object.assign(v, vals);
+  const speed = v.speed || 0, lam = v.lambda || 1;
+  const lph = v.maf != null ? v.maf*3600/(STOICH*lam*PETROL_DENSITY) : null;
+  v.lph = lph != null ? +lph.toFixed(2) : null;
+  v.kmpl = lph && speed > 5 ? +(speed/lph).toFixed(1) : null;
+
+  if (trip.start == null) trip.start = now;
+  if (trip.last != null){
+    const dt = Math.min(now - trip.last, 5);
+    trip.dist_km += speed*dt/3600;
+    if (lph) trip.fuel_l += lph*dt/3600;
+    if ((v.rpm||0) > 300) trip[speed < 2 ? "idle_s" : "moving_s"] += dt;
+  }
+  trip.last = now;
+  if (v.coolant != null) trip.max_cool = Math.max(trip.max_cool ?? -99, v.coolant);
+  trip.max_speed = Math.max(trip.max_speed, speed);
+  trip.max_rpm = Math.max(trip.max_rpm, v.rpm || 0);
+  const d = trip.dist_km;
+  state.trip = { dist_km:d, fuel_l:trip.fuel_l, avg_kmpl: d > 0.5 && trip.fuel_l > 0 ? d/trip.fuel_l : null,
+    elapsed_s: Math.round(now - trip.start), max_cool:trip.max_cool, max_speed:trip.max_speed,
+    max_rpm:Math.round(trip.max_rpm), idle_s:Math.round(trip.idle_s), moving_s:Math.round(trip.moving_s) };
+
+  if (now - lastRow >= 1){       // one CSV row per second
+    lastRow = now;
+    tripRows.push([new Date().toTimeString().slice(0,8), ...LOG_COLS.slice(1).map(c => v[c] ?? "")]);
+    if (tripRows.length % 30 === 0) saveTrip();
+  }
+}
+
+// ---- trips stored on the phone (localStorage; per-browser, may be cleared by iOS)
+const STORE = "pajero.trips.v1";
+function loadTrips(){ try { return JSON.parse(localStorage.getItem(STORE)) || []; } catch { return []; } }
+function storeTrips(list){
+  for (;;){
+    try { localStorage.setItem(STORE, JSON.stringify(list)); return; }
+    catch { if (list.length <= 1) return; list.shift(); }   // full: drop oldest trip
+  }
+}
+function saveTrip(){
+  if (!trip.start || tripRows.length < 5) return;
+  const id = String(Math.round(trip.start*1000));
+  const list = loadTrips().filter(t => t.id !== id);
+  list.push({ id, summary: state.trip, rows: tripRows });
+  while (list.length > 30) list.shift();
+  storeTrips(list); renderTrips();
+}
+function csvOf(t){ return [LOG_COLS.join(","), ...t.rows.map(r => r.join(","))].join("\n"); }
+async function exportTrip(id){
+  const t = loadTrips().find(x => x.id === id); if (!t) return;
+  const name = `pajero-trip-${new Date(+id).toISOString().slice(0,16).replace(/[:T]/g,"-")}.csv`;
+  const blob = new Blob([csvOf(t)], {type:"text/csv"});
+  try {
+    const file = new File([blob], name, {type:"text/csv"});
+    if (navigator.canShare && navigator.canShare({files:[file]})){ await navigator.share({files:[file], title:name}); return; }
+  } catch(e){ if (e.name === "AbortError") return; }
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+function deleteTrip(id){ storeTrips(loadTrips().filter(t => t.id !== id)); renderTrips(); }
+function renderTrips(){
+  const list = loadTrips().slice().reverse();
+  $("trips").innerHTML = list.length ? list.map(t => {
+    const s = t.summary || {}, when = new Date(+t.id);
+    return `<div class="t"><span>${when.toLocaleDateString(undefined,{day:"numeric",month:"short"})} ${when.toTimeString().slice(0,5)}
+      · ${fmt(s.dist_km,1)} km · ${s.avg_kmpl ? fmt(s.avg_kmpl,1)+" km/L" : "—"}</span>
+      <span><button data-x="${t.id}">CSV</button> <button data-d="${t.id}">✕</button></span></div>`;
+  }).join("") : `<div class="sub">No trips yet. A trip saves itself every 30 s while connected.</div>`;
+}
+$("trips").addEventListener("click", e => {
+  const x = e.target.dataset.x, d = e.target.dataset.d;
+  if (x) exportTrip(x);
+  if (d && confirm("Delete this trip from the phone?")) deleteTrip(d);
+});
+$("btn-endtrip").onclick = () => { saveTrip(); newTrip(); render(); };
+
+// ================================================================ connection + polling loop
+let elm = null, running = false, demoTimer = null;
+
+async function pollLoop(){
+  const e = elm;
+  for (const c of ["ATZ","ATE0","ATL0","ATS0","ATH0","ATSP6","ATAT2"]) await e.cmd(c, 3000);
+  await e.cmd("0100", 10000);
+  state.dtc_raw = { stored: await e.cmd("03", 6000), pending: await e.cmd("07", 6000) };
+  state.connected = true; state.status = "live";
+  let si = 0, nReq = 0, tRate = Date.now();
+  while (running && e.device.gatt.connected){
+    const batch = [...FAST, SLOW[si++ % SLOW.length]], vals = {};
+    for (const p of batch){
+      const got = parseMode01(await e.cmd("01" + p.toString(16).padStart(2,"0").toUpperCase(), 2000), [p]);
+      if (p in got) vals[PIDS[p][0]] = +got[p].toFixed(2);
+      nReq++;
+    }
+    if (si % 20 === 0){
+      const m = (await e.cmd("ATRV", 2000)).join(" ").match(/(\d+\.\d+)V/);
+      if (m) vals.adapter_v = +m[1];
+    }
+    update(vals);
+    if (Date.now() - tRate > 5000){ state.rate = nReq*1000/(Date.now()-tRate); nReq = 0; tRate = Date.now(); }
+  }
+}
+
+async function connect(){
+  if (!navigator.bluetooth){ alert("This browser has no Web Bluetooth. On iPhone open this page in the Bluefy app."); return; }
+  stopDemo();
+  try {
+    state.status = "choose OBDII…"; render();
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [{ name: ADAPTER_NAME }, { namePrefix: "OBD" }, { namePrefix: "V-LINK" }, { namePrefix: "IOS-Vlink" }],
+      optionalServices: SERVICES });
+    device.addEventListener("gattserverdisconnected", () => {
+      state.connected = false; state.status = "disconnected — reconnecting…"; render();
+    });
+    running = true; $("btn-connect").textContent = "Disconnect";
+    $("intro").style.display = "none";
+    await keepAwake();
+    while (running){
+      try {
+        state.status = "connecting…"; render();
+        elm = new Elm(); await elm.connect(device);
+        await pollLoop();
+      } catch (err){
+        console.error(err); state.connected = false; state.status = "error: " + (err.message || err).toString().slice(0,60);
+      }
+      saveTrip();
+      if (running) await sleep(3000);
+    }
+  } catch (err){
+    state.status = err.name === "NotFoundError" ? "not connected" : "error: " + err.message;
+  }
+  render();
+}
+function disconnect(){
+  running = false; saveTrip();
+  try { elm && elm.device.gatt.connected && elm.device.gatt.disconnect(); } catch {}
+  state.connected = false; state.status = "not connected";
+  $("btn-connect").textContent = "Connect"; render();
+}
+$("btn-connect").onclick = () => running ? disconnect() : connect();
+
+// keep the screen on while driving (where supported)
+let wakeLock = null;
+async function keepAwake(){
+  try { if ("wakeLock" in navigator) wakeLock = await navigator.wakeLock.request("screen"); } catch {}
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && (running || demoTimer)) keepAwake(); });
+
+// ---- demo mode (no car)
+function startDemo(){
+  if (demoTimer) return;
+  newTrip(); state.connected = true; state.status = "DEMO"; state.rate = 6.8;
+  state.dtc_raw = { stored:["43000A78000000"], pending:["4700"] };
+  $("intro").style.display = "none";
+  const t0 = Date.now()/1000; let cool = 45;
+  demoTimer = setInterval(() => {
+    const t = Date.now()/1000 - t0;
+    const speed = Math.max(0, 60 + 50*Math.sin(t/15) + (Math.random()-.5)*4);
+    const rpm = 750 + speed*28 + (Math.random()-.5)*80, thr = Math.max(5, Math.min(80, 15 + 20*Math.cos(t/15)));
+    cool = Math.min(91, cool + 0.15);
+    update({ rpm:Math.round(rpm), speed:Math.round(speed), maf:+(rpm*thr/4000+3).toFixed(2), throttle:+thr.toFixed(1),
+      load:+(thr*.9).toFixed(1), coolant:Math.round(cool), iat:49, volts:+(14.1+(Math.random()-.5)*.2).toFixed(2),
+      stft:+((Math.random()-.5)*8).toFixed(1), ltft:12.5, timing:+(15+thr/5).toFixed(1), map:Math.round(30+thr),
+      lambda:1, o2v:+(0.1+Math.random()*.8).toFixed(2), ambient:41, pedal:+thr.toFixed(1), baro:101 });
+  }, 250);
+}
+function stopDemo(){ if (demoTimer){ clearInterval(demoTimer); demoTimer = null; newTrip(); state.values = {}; } }
+$("btn-demo").onclick = startDemo;
+
+// ================================================================ rendering
+const A0 = 225, A1 = 495;
+function pt(cx, cy, r, a){ const t = (a-90)*Math.PI/180; return [cx + r*Math.cos(t), cy + r*Math.sin(t)]; }
+function arc(cx, cy, r, a0, a1){
+  const [x0,y0] = pt(cx,cy,r,a0), [x1,y1] = pt(cx,cy,r,a1);
+  return `M${x0.toFixed(2)} ${y0.toFixed(2)} A${r} ${r} 0 ${a1-a0>180?1:0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`;
+}
+function buildGauge(svg, max, step, red){
+  let s = `<path d="${arc(100,92,76,A0,A1)}" stroke="var(--track)" stroke-width="12" fill="none" stroke-linecap="round"/>`;
+  if (red) s += `<path d="${arc(100,92,76,A0+(A1-A0)*red/max,A1)}" stroke="#5a1f21" stroke-width="12" fill="none"/>`;
+  for (let v = 0; v <= max; v += step){
+    const [x,y] = pt(100,92,58,A0 + (A1-A0)*v/max);
+    s += `<text x="${x.toFixed(1)}" y="${(y+3).toFixed(1)}" fill="var(--muted)" font-size="9" text-anchor="middle">${max>1000? v/1000 : v}</text>`;
+  }
+  s += `<path class="fill" d="" stroke="var(--accent)" stroke-width="12" fill="none" stroke-linecap="round"/>`;
+  svg.innerHTML = s;
+  return v => {
+    const f = Math.max(0, Math.min(1, (v||0)/max)), p = svg.querySelector(".fill");
+    p.setAttribute("d", f > 0.002 ? arc(100,92,76,A0,A0+(A1-A0)*f) : "");
+    p.setAttribute("stroke", red && v >= red ? "var(--bad)" : "var(--accent)");
+  };
+}
+const setSpeed = buildGauge($("g-speed"), 200, 20, 0);
+const setRpm = buildGauge($("g-rpm"), 7000, 1000, 6000);
+
+const hist = [], cv = $("chart"), cx = cv.getContext("2d");
+function drawChart(){
+  const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  if (cv.width !== W*dpr){ cv.width = W*dpr; cv.height = H*dpr; }
+  cx.setTransform(dpr,0,0,dpr,0,0); cx.clearRect(0,0,W,H);
+  cx.strokeStyle = "#232a32"; cx.lineWidth = 1;
+  for (let i=0;i<=4;i++){ const y = 4 + (H-8)*i/4; cx.beginPath(); cx.moveTo(0,y); cx.lineTo(W,y); cx.stroke(); }
+  if (hist.length >= 2){
+    const t0 = hist[hist.length-1].t - 600;
+    for (const [k,c,sc] of [["speed","#3fb6ff",1],["coolant","#ff7a45",1],["rpm","#b37feb",1/50]]){
+      cx.strokeStyle = c; cx.lineWidth = 2; cx.beginPath(); let started = false;
+      for (const h of hist){
+        if (h[k] == null) continue;
+        const x = (h.t - t0)/600*W, y = H - 4 - Math.min(160, h[k]*sc)/160*(H-8);
+        started ? cx.lineTo(x,y) : (cx.moveTo(x,y), started = true);
+      }
+      cx.stroke();
+    }
+  }
+  cx.fillStyle = "#8693a1"; cx.font = "10px -apple-system,sans-serif";
+  cx.fillText("160", 4, 14); cx.fillText("0", 4, H-6);
+}
+
+function decodeDtc(lines){
+  if (!lines || !lines.length) return "no answer";
+  const h = lines.join("").replace(/\s|\d:/g,"").toUpperCase();
+  if (/NODATA/.test(h)) return "none";
+  const i = h.search(/4[37]/); if (i < 0) return lines.join(" ");
+  const b = h.slice(i+2).match(/../g) || [];
+  const code = (x,y) => "PCBU"[x>>6] + ((x>>4)&3) + (x&15).toString(16).toUpperCase() + y.toString(16).padStart(2,"0").toUpperCase();
+  const pairs = arr => { const o=[]; for (let k=0;k+1<arr.length;k+=2){ const x=parseInt(arr[k],16), y=parseInt(arr[k+1],16); if (x||y) o.push(code(x,y)); } return o; };
+  // CAN (this car): first byte = number of codes; anything after count*2 bytes is adapter junk
+  const n = parseInt(b[0] || "0",16);
+  return n === 0 ? "none" : pairs(b.slice(1, 1 + n*2)).join(", ");
+}
+
+function alerts(v){
+  const out = [], running = (v.rpm||0) > 400;
+  if (v.coolant >= 108) out.push(["bad", `Coolant ${v.coolant} °C — overheating, pull over safely`]);
+  else if (v.coolant >= 102) out.push(["warn", `Coolant high: ${v.coolant} °C`]);
+  if (v.volts != null){
+    if (running && v.volts < 13.2) out.push(["warn", `Charging low: ${v.volts} V with engine running`]);
+    if (running && v.volts > 14.9) out.push(["bad", `Over-charging: ${v.volts} V`]);
+    if (!running && v.volts < 12.2) out.push(["warn", `Battery ${v.volts} V with engine off — weak or discharged`]);
+  }
+  const lt = Math.abs(v.ltft ?? 0), tot = Math.abs((v.ltft ?? 0) + (v.stft ?? 0));
+  if (lt >= 20 || tot >= 25) out.push(["bad", `Fuel trim ${fmt((v.ltft??0)+(v.stft??0),1)} % — likely vacuum leak, MAF or fuel-delivery fault`]);
+  else if (lt >= 10) out.push(["warn", `Long-term fuel trim ${fmt(v.ltft,1)} % — engine running ${v.ltft>0?"lean":"rich"}, worth checking`]);
+  if ((v.rpm||0) >= 6000) out.push(["warn", "High RPM"]);
+  $("alerts").innerHTML = out.map(([c,t]) => `<div class="alert ${c}">${t}</div>`).join("");
+}
+function tile(id, cls){ const e = $(id); e.classList.remove("warn","bad"); if (cls) e.classList.add(cls); }
+function hms(s){ if (s==null) return "—"; const m = Math.floor(s/60); return m>=60 ? `${Math.floor(m/60)}h${String(m%60).padStart(2,"0")}` : `${m}:${String(s%60).padStart(2,"0")}`; }
+
+let lastHist = 0;
+function render(){
+  const st = state, v = st.values, tr = st.trip;
+  $("status").textContent = st.status; $("status").className = "pill " + (st.connected ? "live" : "down");
+  $("rate").textContent = st.connected ? `${fmt(st.rate,1)} req/s` : "";
+  $("v-speed").textContent = fmt(v.speed); setSpeed(v.speed);
+  $("v-rpm").textContent = fmt(v.rpm); setRpm(v.rpm);
+
+  $("v-coolant").textContent = fmt(v.coolant);
+  $("s-coolant").textContent = v.coolant == null ? "" : v.coolant < 70 ? "warming up — go easy" : v.coolant < 102 ? "normal" : "HOT";
+  tile("t-coolant", v.coolant >= 108 ? "bad" : v.coolant >= 102 ? "warn" : null);
+
+  const running = (v.rpm||0) > 400;
+  $("v-volts").textContent = fmt(v.volts, 2);
+  $("s-volts").textContent = v.volts == null ? "" : running ? (v.volts >= 13.2 && v.volts <= 14.9 ? "alternator charging OK" : "check charging") : (v.volts >= 12.4 ? "engine off · healthy" : "engine off · low");
+  tile("t-volts", v.volts == null ? null : running ? (v.volts < 13.2 || v.volts > 14.9 ? "warn" : null) : (v.volts < 12.2 ? "warn" : null));
+
+  if (v.kmpl != null){ $("v-fuel").textContent = fmt(v.kmpl,1); $("u-fuel").textContent = "km/L"; }
+  else { $("v-fuel").textContent = fmt(v.lph,1); $("u-fuel").textContent = v.lph != null ? "L/h idle" : "km/L"; }
+  $("s-fuel").textContent = v.lph != null ? `${fmt(v.lph,1)} L/h · estimated from MAF` : "";
+
+  $("v-iat").textContent = fmt(v.iat);
+  $("s-iat").textContent = v.ambient != null ? `ambient ${v.ambient} °C` : "";
+  tile("t-iat", v.iat >= 65 ? "warn" : null);
+  $("v-throttle").textContent = fmt(v.throttle); $("b-throttle").style.width = `${Math.min(100, v.throttle||0)}%`;
+  $("v-load").textContent = fmt(v.load); $("b-load").style.width = `${Math.min(100, v.load||0)}%`;
+  $("v-maf").textContent = fmt(v.maf,1); $("v-map").textContent = fmt(v.map);
+  $("v-timing").textContent = fmt(v.timing,1); $("v-o2v").textContent = fmt(v.o2v,2);
+
+  for (const k of ["stft","ltft"]){
+    $("v-"+k).textContent = v[k] == null ? "—" : `${v[k] > 0 ? "+" : ""}${fmt(v[k],1)} %`;
+    $("d-"+k).style.left = `${50 + Math.max(-25, Math.min(25, v[k]||0)) * 2}%`;
+    $("d-"+k).style.background = Math.abs(v[k]||0) >= 20 ? "var(--bad)" : Math.abs(v[k]||0) >= 10 ? "var(--warn)" : "var(--ok)";
+  }
+  tile("t-trims", Math.abs(v.ltft||0) >= 20 ? "bad" : Math.abs(v.ltft||0) >= 10 ? "warn" : null);
+
+  $("tr-dist").textContent = tr.dist_km != null ? `${fmt(tr.dist_km,1)} km` : "—";
+  $("tr-fuel").textContent = tr.fuel_l != null ? `${fmt(tr.fuel_l,2)} L` : "—";
+  $("tr-avg").textContent = tr.avg_kmpl != null ? `${fmt(tr.avg_kmpl,1)} km/L` : "—";
+  $("tr-time").textContent = hms(tr.elapsed_s);
+  const tot = (tr.idle_s||0) + (tr.moving_s||0);
+  $("tr-idle").textContent = tot > 0 ? `${Math.round(100*tr.idle_s/tot)} %` : "—";
+  $("tr-cool").textContent = tr.max_cool != null ? `${tr.max_cool}°` : "—";
+
+  if (st.dtc_raw){
+    const s = decodeDtc(st.dtc_raw.stored), p = decodeDtc(st.dtc_raw.pending);
+    $("dtc").innerHTML = `Stored: <b>${s}</b> · Pending: <b>${p}</b><br><span class="sub">Generic decode — confirm in Car Scanner's fault-code screen.</span><br><code>raw ${(st.dtc_raw.stored||[]).join(" ")} | ${(st.dtc_raw.pending||[]).join(" ")}</code>`;
+  }
+  alerts(v);
+  const now = Date.now()/1000;
+  if (st.connected && now - lastHist >= 1){
+    lastHist = now;
+    hist.push({t:now, speed:v.speed, coolant:v.coolant, rpm:v.rpm});
+    while (hist.length && hist[0].t < now - 600) hist.shift();
+    drawChart();
+  }
+}
+
+$("bt-support").innerHTML = navigator.bluetooth
+  ? "✅ This browser supports Web Bluetooth."
+  : "⚠️ This browser has no Web Bluetooth (Safari/Chrome on iPhone don't). Open this page in <b>Bluefy</b>.";
+window.addEventListener("resize", drawChart);
+window.addEventListener("pagehide", saveTrip);
+renderTrips(); drawChart(); render();
+setInterval(render, 250);
+</script>
+</body>
+</html>
