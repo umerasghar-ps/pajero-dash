@@ -260,23 +260,41 @@ class Elm {
     }
     step("connecting: reading characteristics");
     let w = null, n = null;
+    const all = [];
     for (const svc of services){
       const chars = await withTimeout(svc.getCharacteristics(), 6000, "characteristics");
       for (const ch of chars){
-        const p = ch.properties;
-        dbg(`char ${ch.uuid.slice(4,8)} ${["read","write","writeWithoutResponse","notify","indicate"].filter(k => p[k]).join("/")}`);
+        const p = ch.properties;                       // some iOS browsers (BLE Link) leave this undefined
+        const uuid = String(ch.uuid || "").toLowerCase();
+        all.push(ch);
+        dbg(`char ${uuid.slice(4,8) || uuid} ` + (p ? ["read","write","writeWithoutResponse","notify","indicate"].filter(k => p[k]).join("/") || "(no flags)" : "(properties unavailable)"));
+        if (!p) continue;
         if (!n && (p.notify || p.indicate)) n = ch;
         if (!w && (p.write || p.writeWithoutResponse)) w = ch;
       }
       if (w && n) break;
     }
+    if (!n || !w){
+      // no capability flags: choose by the UUIDs ELM327 BLE adapters use (yours: FFF1 does both on the Mac)
+      // ids in priority order (first id wins, not first characteristic)
+      const byId = ids => { for (const id of ids){ const c = all.find(c => String(c.uuid).toLowerCase().includes(id)); if (c) return c; } };
+      n = n || byId(["fff1", "ffe1", "2af0", "bef8d6c9", "49535343-1e4d", "6e400003"]) || all.find(c => c.startNotifications);
+      w = w || byId(["fff1", "ffe1", "2af1", "bef8d6c9", "49535343-8841", "6e400002", "fff2"]) || n;
+      if (n && w) dbg(`picked by UUID: notify ${String(n.uuid).slice(4,8)}, write ${String(w.uuid).slice(4,8)}`);
+    }
     if (!w || !n) throw new Error("adapter has no serial characteristic");
-    this.w = w; this.n = n;
-    // write methods to try, best first; a method that fails or hangs is dropped for the session
-    this.writeModes = [];
-    if (w.properties.writeWithoutResponse && w.writeValueWithoutResponse) this.writeModes.push("noresp");
-    if (w.properties.write && w.writeValueWithResponse) this.writeModes.push("resp");
-    this.writeModes.push("legacy");
+    this.n = n;
+    // (characteristic, method) pairs to try, best first; one that fails or hangs is dropped for the session
+    const modesOf = c => {
+      const p = c.properties, m = [];
+      if ((!p || p.writeWithoutResponse) && typeof c.writeValueWithoutResponse === "function") m.push("noresp");
+      if ((!p || p.write) && typeof c.writeValueWithResponse === "function") m.push("resp");
+      if (typeof c.writeValue === "function") m.push("legacy");
+      return m;
+    };
+    const chars = [w, ...all.filter(c => c !== w)];
+    this.writeModes = chars.flatMap(c => modesOf(c).map(mode => ({c, mode})));
+    dbg("write options: " + this.writeModes.map(o => String(o.c.uuid).slice(4,8) + ":" + o.mode).join(", "));
     activeElm = this;
     if (notifyChar && notifyChar !== n) notifyChar.removeEventListener("characteristicvaluechanged", onNotify);
     n.removeEventListener("characteristicvaluechanged", onNotify);
@@ -292,14 +310,14 @@ class Elm {
   }
   async write(data){
     while (this.writeModes.length){
-      const mode = this.writeModes[0];
+      const {c, mode} = this.writeModes[0];
       try {
-        const p = mode === "noresp" ? this.w.writeValueWithoutResponse(data)
-                : mode === "resp" ? this.w.writeValueWithResponse(data) : this.w.writeValue(data);
+        const p = mode === "noresp" ? c.writeValueWithoutResponse(data)
+                : mode === "resp" ? c.writeValueWithResponse(data) : c.writeValue(data);
         await withTimeout(p, 2500, "write");
         return;
       } catch (err){
-        dbg(`write mode '${mode}' failed (${err.message}) — trying next`);
+        dbg(`write ${String(c.uuid).slice(4,8)}:${mode} failed (${err.message}) — trying next`);
         this.writeModes.shift();
       }
     }
