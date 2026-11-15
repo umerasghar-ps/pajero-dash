@@ -86,6 +86,53 @@
     .lower{grid-template-columns:1fr}
     .gauge .val{font-size:40px} .gauge .unit{top:calc(46% + 44px)}
   }
+  /* ================= car mode: one landscape screen for head units (≈1024×600 / 1280×720) ================= */
+  .caronly{display:none}
+  body.car{max-width:none;height:100vh;height:100dvh;overflow:hidden;padding:6px 8px;display:grid;gap:6px;
+    grid-template-columns:minmax(0,.8fr) minmax(0,1.35fr) minmax(0,1fr);
+    grid-template-rows:auto auto minmax(0,1fr) minmax(0,1fr)}
+  body.car.more{height:auto;overflow:auto}
+  body.car .caronly{display:inline-block}
+  body.car header{grid-column:1/-1;grid-row:1;margin:0;gap:6px}
+  body.car header button{padding:5px 10px;font-size:13px}
+  body.car h1{font-size:15px}
+  body.car #intro{grid-column:1/-1;grid-row:2;margin:0;padding:8px 12px}
+  body.car #intro p{margin:2px 0}
+  body.car #alerts{grid-column:1/-1;grid-row:2;margin:0;flex-direction:row;flex-wrap:wrap;gap:6px}
+  body.car #alerts:empty{display:none}
+  body.car .alert{padding:3px 10px;font-size:12px}
+  body.car .card{padding:8px 10px;border-radius:10px}
+  body.car .label{font-size:11px}
+  /* col 1: speed over rpm */
+  body.car .gauges{grid-column:1;grid-row:3/5;grid-template-columns:1fr;grid-template-rows:1fr 1fr;gap:6px;min-height:0}
+  body.car .gauge{padding:2px;display:flex;align-items:center;justify-content:center;min-height:0}
+  body.car .gauge svg{height:100%;width:auto;max-width:100%;max-height:100%}
+  body.car .gauge .val{top:44%;font-size:clamp(22px,7vh,48px)}
+  body.car .gauge .unit{top:calc(44% + clamp(22px,7vh,48px) + 2px);font-size:11px}
+  /* col 2: fuel (top) + trends (bottom) */
+  body.car #fuelcard{grid-column:2;grid-row:3;margin:0;min-height:0;display:flex;flex-direction:column;justify-content:space-between}
+  body.car .fuelgrid{gap:6px;margin-top:2px}
+  body.car .fuelgrid .big{font-size:clamp(16px,4.6vh,28px)}
+  body.car .livefuel{font-size:clamp(22px,7vh,44px)!important}
+  body.car .fuelgrid .sub{font-size:11px}
+  body.car .btnrow{margin-top:4px;gap:5px}
+  body.car .btnrow button{padding:4px 6px;font-size:12px}
+  body.car #trendcard{grid-column:2;grid-row:4;margin:0;min-height:0;display:flex;flex-direction:column}
+  body.car .tcharts{display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:1;min-height:0}
+  body.car .tchart{display:flex;flex-direction:column;min-height:0}
+  body.car .tchart .row{margin-top:2px!important}
+  body.car canvas.trend{flex:1;height:auto;min-height:0}
+  body.car #trendcard .legend{display:none}
+  body.car .seg button{padding:3px 8px;font-size:11px}
+  /* col 3: tiles 2×4 */
+  body.car .tiles{grid-column:3;grid-row:3/5;margin:0;grid-template-columns:1fr 1fr;grid-auto-rows:minmax(0,1fr);gap:6px;min-height:0}
+  body.car .tile .big{font-size:clamp(16px,4.4vh,26px);margin-top:0}
+  body.car .tile .sub{font-size:10px}
+  body.car .tile .bar{margin-top:4px;height:6px}
+  /* everything else only after "More" */
+  body.car .lower{display:none}
+  body.car.more .lower{display:grid;grid-column:1/-1;grid-row:5;margin:0}
+
   @media (max-width:480px){
     .fuelgrid{grid-template-columns:1fr 1fr}
     .gauges{gap:8px}
@@ -101,6 +148,8 @@
   <h1>Pajero V6 · Live</h1>
   <span id="status" class="pill down">not connected</span>
   <span class="spacer"></span>
+  <button id="btn-more" class="caronly">More ▾</button>
+  <button id="btn-carmode" title="Switch layout">🚗 Car mode</button>
   <button id="btn-retry">↻ Try again</button>
   <button id="btn-connect" class="primary">Connect</button>
 </header>
@@ -144,17 +193,23 @@
   </div>
 </div>
 
-<div class="card" style="margin-top:12px">
+<div class="card" id="trendcard" style="margin-top:12px">
   <div class="row">
     <div class="label">Trends</div>
     <div class="seg" id="trend-seg">
       <button data-r="600" class="on">10 min</button><button data-r="1800">30 min</button><button data-r="0">Trip</button>
     </div>
   </div>
-  <div class="row" style="margin-top:10px"><span class="sub">Fuel economy · km/L</span><span class="sub" id="t-kmpl-note"></span></div>
-  <canvas id="c-kmpl" class="trend"></canvas>
-  <div class="row" style="margin-top:10px"><span class="sub">Speed · km/h</span><span class="sub" id="t-speed-note"></span></div>
-  <canvas id="c-speed" class="trend"></canvas>
+  <div class="tcharts">
+    <div class="tchart">
+      <div class="row" style="margin-top:10px"><span class="sub">Fuel economy · km/L</span><span class="sub" id="t-kmpl-note"></span></div>
+      <canvas id="c-kmpl" class="trend"></canvas>
+    </div>
+    <div class="tchart">
+      <div class="row" style="margin-top:10px"><span class="sub">Speed · km/h</span><span class="sub" id="t-speed-note"></span></div>
+      <canvas id="c-speed" class="trend"></canvas>
+    </div>
+  </div>
   <div class="legend"><span><i style="background:var(--muted)"></i>dashed = trip average</span><span>gaps = stopped / idling</span></div>
 </div>
 
@@ -896,6 +951,38 @@ window.addEventListener("pagehide", saveTrip);
 renderTrips(); drawChart(); drawTrends(); render();
 
 // offline support: save the app on this device (works without internet after the first visit)
+// ---- car mode (landscape one-screen layout). Auto on wide, short screens; the choice is remembered.
+const CAR_KEY = "pajero.carmode";
+function wantCarMode(){
+  let pref = null; try { pref = localStorage.getItem(CAR_KEY); } catch {}
+  if (pref === "on") return true;
+  if (pref === "off") return false;
+  return innerWidth > innerHeight && innerHeight <= 820 && innerWidth >= 700;
+}
+function applyCarMode(on){
+  document.body.classList.toggle("car", on);
+  if (!on) document.body.classList.remove("more");
+  $("btn-carmode").textContent = on ? "📱 Normal view" : "🚗 Car mode";
+  $("btn-more").textContent = document.body.classList.contains("more") ? "Less ▴" : "More ▾";
+  requestAnimationFrame(() => { drawChart(); drawTrends(); });
+}
+$("btn-carmode").onclick = () => {
+  const on = !document.body.classList.contains("car");
+  try { localStorage.setItem(CAR_KEY, on ? "on" : "off"); } catch {}
+  applyCarMode(on);
+};
+$("btn-more").onclick = () => {
+  document.body.classList.toggle("more");
+  applyCarMode(true);
+  if (document.body.classList.contains("more")) document.querySelector(".lower").scrollIntoView({behavior:"smooth"});
+  else window.scrollTo(0,0);
+};
+window.addEventListener("resize", () => {
+  let pref = null; try { pref = localStorage.getItem(CAR_KEY); } catch {}
+  if (!pref) applyCarMode(wantCarMode());
+});
+applyCarMode(wantCarMode());
+
 let installEvt = null;
 window.addEventListener("beforeinstallprompt", e => {            // Android Chrome: offer "Install app"
   e.preventDefault(); installEvt = e; $("btn-install").style.display = "inline-block";
