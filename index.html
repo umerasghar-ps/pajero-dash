@@ -871,14 +871,14 @@ function drawTrends(){
 
 // ---- water (coolant) temperature bar + alarm
 // Bar mimics the dash needle: 50 °C = 0 % (C), 90 °C = 50 % (normal middle), 130 °C = 100 % (H)
-// Alarm is set in needle % (user's choice: red screen above 51 %). Amber starts 4 % below that.
-const WT_KEY = "pajero.watertemp.v2";
-const wtPct = c => Math.max(0, Math.min(100, (c - 50) / 80 * 100));
-const pctToC = p => 50 + p * 0.8;
-let wtRedPct = (() => { try { const v = parseFloat(localStorage.getItem(WT_KEY)); return v >= 30 && v <= 95 ? v : null; } catch { return null; } })() ?? 51;
+// Alarm set in real °C. The dash needle is "buffered": it sits mid-scale from ~80 to ~105 °C and only
+// rises above the middle when genuinely overheating, so the default red limit is 105 °C (this car runs ~95 °C).
+const WT_KEY = "pajero.watertemp.c";
+const wtPct = c => Math.max(0, Math.min(100, (c - 50) / 80 * 100));     // bar fill only
+let wtRedC = (() => { try { const v = parseFloat(localStorage.getItem(WT_KEY)); return v >= 80 && v <= 125 ? v : null; } catch { return null; } })() ?? 105;
 const wt = {};
-function setWt(p){ wtRedPct = p; wt.hot = pctToC(p) + 0.01; wt.warn = wt.hot; }   // green until the limit, then red (amber only for "rising fast")
-setWt(wtRedPct);
+function setWt(c){ wtRedC = c; wt.hot = c; wt.warn = c - 3; }           // amber for the last 3 °C before red
+setWt(wtRedC);
 const wtHist = [];          // [t, °C] for the trend
 let wtRate = null, lastBeep = 0, audioCtx = null;
 function primeAudio(){       // browsers only allow sound after a tap; Connect / the bar count as taps
@@ -906,10 +906,10 @@ function renderWater(c){
   const old = wtHist.find(h => h[0] >= now - 120);
   wtRate = old && now - old[0] >= 30 ? (c - old[1]) / ((now - old[0]) / 60) : null;
   $("wt-val").textContent = c;
-  $("wt-pct").textContent = `needle ${Math.round(wtPct(c))}%`;
+  $("wt-pct").textContent = c < 70 ? "warming up" : c < wt.warn ? "normal" : c < wt.hot ? "getting hot" : "OVERHEATING";
   $("wt-trend").textContent = wtRate == null ? "" : wtRate > 0.5 ? `▲ ${wtRate.toFixed(1)}/min` : wtRate < -0.5 ? `▼ ${(-wtRate).toFixed(1)}/min` : "steady";
   $("wt-fill").style.width = `${wtPct(c)}%`;
-  const hot = wtPct(c) > wtRedPct;
+  const hot = c >= wt.hot;
   if (hot){
     box.classList.add("hot");
     if (now - lastBeep > 6 && !state.demo){ lastBeep = now; beep(); }
@@ -926,11 +926,11 @@ function setOverheat(on){
 $("ohbanner").addEventListener("click", () => document.body.classList.add("ohhide"));
 $("wt").addEventListener("click", () => {
   primeAudio();
-  const a = prompt(`Turn the screen RED when the water needle goes over what %?\n(50 % ≈ 90 °C = needle in the middle; now ${wtRedPct} % ≈ ${Math.round(wt.hot)} °C)`, wtRedPct);
+  const a = prompt(`Turn the screen RED at what water temperature (°C)?\n\nYour car normally runs about 90–98 °C (dash needle in the middle).\nOverheating starts around 105–110 °C. Now set to ${wtRedC} °C.`, wtRedC);
   if (a === null) return;
-  const p = parseFloat(a);
-  if (p >= 30 && p <= 95){ setWt(p); try { localStorage.setItem(WT_KEY, String(p)); } catch {} render(); }
-  else alert("Not changed: enter a number from 30 to 95.");
+  const c = parseFloat(a);
+  if (c >= 80 && c <= 125){ setWt(c); try { localStorage.setItem(WT_KEY, String(c)); } catch {} render(); }
+  else alert("Not changed: enter a temperature from 80 to 125 °C.");
 });
 
 function decodeDtc(lines){
