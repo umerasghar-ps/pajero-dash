@@ -86,6 +86,25 @@
     .lower{grid-template-columns:1fr}
     .gauge .val{font-size:40px} .gauge .unit{top:calc(46% + 44px)}
   }
+  /* ---- water temperature bar (always visible) */
+  .wt{display:flex;align-items:center;gap:8px;flex:1 1 300px;min-width:240px;max-width:560px;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:4px 10px;cursor:pointer;
+    font-variant-numeric:tabular-nums;font-size:13px}
+  .wt-l{color:var(--muted);white-space:nowrap}
+  .wt-bar{position:relative;flex:1;height:12px;border-radius:6px;overflow:visible;
+    background:linear-gradient(90deg,#1d3b5c 0%,#1f5236 35%,#1f5236 58%,#5a4313 66%,#6b2224 82%,#6b2224 100%)}
+  .wt-bar #wt-fill{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:6px;background:var(--ok);transition:width .5s,background .3s}
+  .wt-half{position:absolute;left:50%;top:-3px;bottom:-3px;width:2px;background:#c9d2db;opacity:.8}
+  .wt-mark{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--warn)}
+  .wt-mark.hot{background:var(--bad)}
+  .wt-v{white-space:nowrap} .wt-v b{font-size:18px}
+  .wt-p,.wt-t{color:var(--muted);white-space:nowrap;font-size:12px}
+  .wt.cold #wt-fill{background:var(--accent)}
+  .wt.warn{border-color:var(--warn)} .wt.warn #wt-fill{background:var(--warn)} .wt.warn .wt-v{color:var(--warn)}
+  .wt.hot{border-color:var(--bad);animation:wtflash .8s infinite} .wt.hot #wt-fill{background:var(--bad)} .wt.hot .wt-v{color:#fff}
+  @keyframes wtflash{0%,100%{background:#2c1213}50%{background:#7a1c1f}}
+  @media (max-width:480px){ .wt{order:10;flex-basis:100%;max-width:none} }
+
   /* ================= car mode: one landscape screen for head units (≈1024×600 / 1280×720) ================= */
   .caronly{display:none}
   body.car{max-width:none;height:100vh;height:100dvh;overflow:hidden;padding:6px 8px;display:grid;gap:6px;
@@ -147,7 +166,15 @@
 <header>
   <h1>Pajero V6 · Live</h1>
   <span id="status" class="pill down">not connected</span>
+  <div id="wt" class="wt" title="Tap to set the warning temperatures">
+    <span class="wt-l">💧 Water</span>
+    <div class="wt-bar"><i id="wt-fill"></i><b class="wt-half"></b><b id="wt-warnmark" class="wt-mark"></b><b id="wt-hotmark" class="wt-mark hot"></b></div>
+    <span class="wt-v"><b id="wt-val">—</b> °C</span>
+    <span class="wt-p" id="wt-pct"></span>
+    <span class="wt-t" id="wt-trend"></span>
+  </div>
   <span class="spacer"></span>
+  <button id="btn-fs" title="Full screen">⛶</button>
   <button id="btn-more" class="caronly">More ▾</button>
   <button id="btn-carmode" title="Switch layout">🚗 Car mode</button>
   <button id="btn-retry">↻ Try again</button>
@@ -599,7 +626,11 @@ async function pollLoop(){
   state.connected = true; state.status = "live";
   let si = 0, nReq = 0, tRate = Date.now();
   while (running && e.device.gatt.connected){
-    const batch = [...FAST, SLOW[si++ % SLOW.length]], vals = {};
+    // coolant (water temp) every other cycle (~2 s) because overheating matters; the rest rotate slowly
+    const slow = SLOW[si % SLOW.length], batch = [...FAST, slow];
+    if (si % 2 === 0 && slow !== 0x05) batch.push(0x05);
+    si++;
+    const vals = {};
     for (const p of batch){
       const got = parseMode01(await e.cmd("01" + p.toString(16).padStart(2,"0").toUpperCase(), 2000), [p]);
       if (p in got) vals[PIDS[p][0]] = +got[p].toFixed(2);
@@ -671,7 +702,7 @@ function disconnect(){
   state.connected = false; state.status = "not connected";
   $("btn-connect").textContent = "Connect"; render();
 }
-$("btn-connect").onclick = () => running ? disconnect() : connect();
+$("btn-connect").onclick = () => { primeAudio(); return running ? disconnect() : connect(); };
 $("btn-retry").onclick = tryAgain;
 
 // keep the screen on while driving (where supported)
@@ -823,6 +854,60 @@ function drawTrends(){
   $("t-speed-note").textContent = pts.length ? `max ${Math.max(...pts.map(p => p.s)).toFixed(0)}${avgSpeed ? ` · avg moving ${avgSpeed.toFixed(0)}` : ""}` : "";
 }
 
+// ---- water (coolant) temperature bar + alarm
+// Bar mimics the dash needle: 50 °C = 0 % (C), 90 °C = 50 % (normal middle), 130 °C = 100 % (H)
+const WT_KEY = "pajero.watertemp";
+let wt = (() => { try { return JSON.parse(localStorage.getItem(WT_KEY)) || null; } catch { return null; } })() || { warn: 100, hot: 105 };
+const wtPct = c => Math.max(0, Math.min(100, (c - 50) / 80 * 100));
+const wtHist = [];          // [t, °C] for the trend
+let wtRate = null, lastBeep = 0, audioCtx = null;
+function primeAudio(){       // browsers only allow sound after a tap; Connect / the bar count as taps
+  try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume && audioCtx.resume(); } catch {}
+}
+function beep(){
+  try {
+    if (!audioCtx) return;
+    for (const [at, f] of [[0, 880], [0.25, 660], [0.5, 880]]){
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.frequency.value = f; o.type = "square"; g.gain.value = 0.15;
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(audioCtx.currentTime + at); o.stop(audioCtx.currentTime + at + 0.18);
+    }
+  } catch {}
+  try { navigator.vibrate && navigator.vibrate([300, 150, 300]); } catch {}
+}
+function renderWater(c){
+  const box = $("wt");
+  $("wt-warnmark").style.left = `${wtPct(wt.warn)}%`;
+  $("wt-hotmark").style.left = `${wtPct(wt.hot)}%`;
+  box.classList.remove("cold","warn","hot");
+  if (c == null){ $("wt-val").textContent = "—"; $("wt-pct").textContent = ""; $("wt-trend").textContent = ""; $("wt-fill").style.width = "0"; return; }
+  const now = Date.now()/1000;
+  if (!wtHist.length || now - wtHist[wtHist.length-1][0] >= 1.5) wtHist.push([now, c]);
+  while (wtHist.length && wtHist[0][0] < now - 180) wtHist.shift();
+  const old = wtHist.find(h => h[0] >= now - 120);
+  wtRate = old && now - old[0] >= 30 ? (c - old[1]) / ((now - old[0]) / 60) : null;
+  $("wt-val").textContent = c;
+  $("wt-pct").textContent = `${Math.round(wtPct(c))}%`;
+  $("wt-trend").textContent = wtRate == null ? "" : wtRate > 0.5 ? `▲ ${wtRate.toFixed(1)}/min` : wtRate < -0.5 ? `▼ ${(-wtRate).toFixed(1)}/min` : "steady";
+  $("wt-fill").style.width = `${wtPct(c)}%`;
+  if (c >= wt.hot){
+    box.classList.add("hot");
+    if (now - lastBeep > 6 && !state.demo){ lastBeep = now; beep(); }
+  } else if (c >= wt.warn || (wtRate != null && wtRate >= 3 && c >= 95)) box.classList.add("warn");
+  else if (c < 70) box.classList.add("cold");
+}
+$("wt").addEventListener("click", () => {
+  primeAudio();
+  const a = prompt(`Water temp: AMBER warning at how many °C?\n(normal running is about 85–100 °C; 90 °C ≈ needle in the middle)`, wt.warn);
+  if (a === null) return;
+  const b = prompt(`Water temp: RED alarm + beep at how many °C?`, wt.hot);
+  if (b === null) return;
+  const w = parseFloat(a), h = parseFloat(b);
+  if (w >= 60 && w <= 125 && h > w && h <= 130){ wt = { warn: w, hot: h }; try { localStorage.setItem(WT_KEY, JSON.stringify(wt)); } catch {} render(); }
+  else alert("Not changed: amber must be 60–125 °C and red must be higher than amber (max 130 °C).");
+});
+
 function decodeDtc(lines){
   if (!lines || !lines.length) return "no answer";
   const h = lines.join("").replace(/\s|\d:/g,"").toUpperCase();
@@ -838,8 +923,9 @@ function decodeDtc(lines){
 
 function alerts(v){
   const out = [], running = (v.rpm||0) > 400;
-  if (v.coolant >= 108) out.push(["bad", `Coolant ${v.coolant} °C — overheating, pull over safely`]);
-  else if (v.coolant >= 102) out.push(["warn", `Coolant high: ${v.coolant} °C`]);
+  if (v.coolant >= wt.hot) out.push(["bad", `Water temp ${v.coolant} °C — overheating. Ease off, switch A/C off, heater to full hot; pull over safely if it keeps rising`]);
+  else if (v.coolant >= wt.warn) out.push(["warn", `Water temp high: ${v.coolant} °C`]);
+  else if (wtRate != null && wtRate >= 3 && v.coolant >= 95) out.push(["warn", `Water temp rising fast: +${wtRate.toFixed(1)} °C/min`]);
   if (v.volts != null){
     if (running && v.volts < 13.2) out.push(["warn", `Charging low: ${v.volts} V with engine running`]);
     if (running && v.volts > 14.9) out.push(["bad", `Over-charging: ${v.volts} V`]);
@@ -865,8 +951,9 @@ function render(){
   $("v-rpm").textContent = fmt(v.rpm); setRpm(v.rpm);
 
   $("v-coolant").textContent = fmt(v.coolant);
-  $("s-coolant").textContent = v.coolant == null ? "" : v.coolant < 70 ? "warming up — go easy" : v.coolant < 102 ? "normal" : "HOT";
-  tile("t-coolant", v.coolant >= 108 ? "bad" : v.coolant >= 102 ? "warn" : null);
+  $("s-coolant").textContent = v.coolant == null ? "" : v.coolant < 70 ? "warming up — go easy" : v.coolant < wt.warn ? "normal" : "HOT";
+  tile("t-coolant", v.coolant >= wt.hot ? "bad" : v.coolant >= wt.warn ? "warn" : null);
+  renderWater(v.coolant);
 
   const running = (v.rpm||0) > 400;
   $("v-volts").textContent = fmt(v.volts, 2);
@@ -951,6 +1038,23 @@ window.addEventListener("pagehide", saveTrip);
 renderTrips(); drawChart(); drawTrends(); render();
 
 // offline support: save the app on this device (works without internet after the first visit)
+// ---- full screen (hides Chrome's bars and the Android status bar)
+const fsEl = document.documentElement;
+const fsOn = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+$("btn-fs").onclick = async () => {
+  primeAudio();
+  try {
+    if (fsOn()) await (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    else await (fsEl.requestFullscreen || fsEl.webkitRequestFullscreen).call(fsEl, { navigationUI: "hide" });
+  } catch (e){ dbg("full screen not available: " + e.message); }
+};
+document.addEventListener("fullscreenchange", () => {
+  $("btn-fs").textContent = fsOn() ? "🗗" : "⛶";
+  requestAnimationFrame(() => { drawChart(); drawTrends(); });
+});
+// no full-screen API (e.g. iPhone): hide the button
+if (!(fsEl.requestFullscreen || fsEl.webkitRequestFullscreen)) $("btn-fs").style.display = "none";
+
 // ---- car mode (landscape one-screen layout). Auto on wide, short screens; the choice is remembered.
 const CAR_KEY = "pajero.carmode";
 function wantCarMode(){

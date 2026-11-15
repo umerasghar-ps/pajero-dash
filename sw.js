@@ -1,7 +1,7 @@
 // Offline support: keep a copy of the app on the device.
 // Page: network first (so updates arrive when online), falls back to the saved copy offline.
 // Icons/manifest: saved copy first.
-const CACHE = "pajero-live-v2";
+const CACHE = "pajero-live-v3";
 const FILES = ["./", "./index.html", "./manifest.webmanifest", "./icon-180.png", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", e => {
