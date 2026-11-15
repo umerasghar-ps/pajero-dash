@@ -507,6 +507,7 @@ let lastRow = 0;
 function update(vals){
   const now = Date.now()/1000, v = state.values;
   Object.assign(v, vals);
+  if (vals.coolant != null) state.coolantAt = now;
   const speed = v.speed || 0, lam = v.lambda || 1;
   const lph = v.maf != null ? v.maf*3600/(STOICH*lam*PETROL_DENSITY) : null;
   v.lph = lph != null ? +lph.toFixed(2) : null;
@@ -909,6 +910,12 @@ function renderWater(c){
   $("wt-pct").textContent = c < 70 ? "warming up" : c < wt.warn ? "normal" : c < wt.hot ? "getting hot" : "OVERHEATING";
   $("wt-trend").textContent = wtRate == null ? "" : wtRate > 0.5 ? `▲ ${wtRate.toFixed(1)}/min` : wtRate < -0.5 ? `▼ ${(-wtRate).toFixed(1)}/min` : "steady";
   $("wt-fill").style.width = `${wtPct(c)}%`;
+  // only alarm on a live, recent reading — never on a value left over after a disconnect
+  const fresh = state.connected && !state.demo && state.coolantAt && now - state.coolantAt < 15;
+  if (!fresh && !state.demo){
+    $("wt-pct").textContent = state.connected ? "waiting for reading" : "last reading — not connected";
+    box.classList.add("cold"); setOverheat(false); return;
+  }
   const hot = c >= wt.hot;
   if (hot){
     box.classList.add("hot");
