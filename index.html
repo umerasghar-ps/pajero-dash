@@ -66,6 +66,12 @@
   #f-leftbox.warn .big{color:var(--warn)} #f-leftbox.warn .bar>i{background:var(--warn)}
   #f-leftbox.bad .big{color:var(--bad)} #f-leftbox.bad .bar>i{background:var(--bad)}
   #btn-retry{display:none}
+  .seg{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  .seg button{border:0;border-radius:0;padding:5px 10px;font-size:12px;font-weight:600;background:transparent;color:var(--muted)}
+  .seg button.on{background:var(--accent);color:#04121c}
+  canvas.trend{height:140px;margin-top:4px}
+  .livefuel{font-size:40px;color:var(--ok)}
+  @media (max-width:480px){ .livefuel{font-size:34px} }
   #intro{margin-bottom:12px}
   #intro p{margin:6px 0 0;color:var(--muted);font-size:13px}
   .trips{margin-top:8px;display:flex;flex-direction:column;gap:6px}
@@ -120,7 +126,7 @@
 <div class="card" id="fuelcard" style="margin-top:12px">
   <div class="row"><div class="label">Fuel</div><span class="sub" id="f-note">estimated from airflow sensor</span></div>
   <div class="fuelgrid">
-    <div><div class="sub">Now</div><div class="big"><span id="f-now">—</span><small id="f-now-u">km/L</small></div></div>
+    <div><div class="sub" id="f-now-l">Live km/L</div><div class="big livefuel"><span id="f-now">—</span><small id="f-now-u">km/L</small></div><div class="sub" id="f-now-s">&nbsp;</div></div>
     <div><div class="sub">Trip average</div><div class="big"><span id="f-avg">—</span><small>km/L</small></div></div>
     <div><div class="sub">Trip time</div><div class="big" id="f-time">—</div><div class="sub" id="f-dist">&nbsp;</div></div>
     <div id="f-leftbox"><div class="sub">Fuel left (est.)</div><div class="big"><span id="f-left">—</span><small>L</small></div>
@@ -132,6 +138,20 @@
     <button id="btn-tank">Tank: <span id="f-tank">88</span> L</button>
     <button id="btn-resettrip">↺ Reset trip</button>
   </div>
+</div>
+
+<div class="card" style="margin-top:12px">
+  <div class="row">
+    <div class="label">Trends</div>
+    <div class="seg" id="trend-seg">
+      <button data-r="600" class="on">10 min</button><button data-r="1800">30 min</button><button data-r="0">Trip</button>
+    </div>
+  </div>
+  <div class="row" style="margin-top:10px"><span class="sub">Fuel economy · km/L</span><span class="sub" id="t-kmpl-note"></span></div>
+  <canvas id="c-kmpl" class="trend"></canvas>
+  <div class="row" style="margin-top:10px"><span class="sub">Speed · km/h</span><span class="sub" id="t-speed-note"></span></div>
+  <canvas id="c-speed" class="trend"></canvas>
+  <div class="legend"><span><i style="background:var(--muted)"></i>dashed = trip average</span><span>gaps = stopped / idling</span></div>
 </div>
 
 <div class="grid tiles">
@@ -374,10 +394,10 @@ function dbg(msg){
 
 // ================================================================ state, trip, logging
 const state = { connected:false, status:"not connected", values:{}, trip:{}, dtc_raw:null, rate:0 };
-let trip, tripRows;
+let trip, tripRows, series;
 function newTrip(){
   trip = { start:null, last:null, dist_km:0, fuel_l:0, max_cool:null, max_speed:0, max_rpm:0, idle_s:0, moving_s:0 };
-  tripRows = []; state.trip = {};
+  tripRows = []; series = []; state.trip = {};
 }
 newTrip();
 const LOG_COLS = ["time","rpm","speed","throttle","load","maf","coolant","iat","volts","stft","ltft","timing","map","lambda","o2v","lph","kmpl"];
@@ -411,6 +431,8 @@ function update(vals){
   if (now - lastRow >= 1){       // one CSV row per second
     lastRow = now;
     tripRows.push([new Date().toTimeString().slice(0,8), ...LOG_COLS.slice(1).map(c => v[c] ?? "")]);
+    series.push({ t: now, s: speed, f: lph || 0 });          // for the Trends charts
+    if (series.length > 6*3600) series.shift();              // keep up to 6 h
     if (tripRows.length % 30 === 0) saveTrip();
   }
 }
@@ -462,7 +484,7 @@ $("trips").addEventListener("click", e => {
 // ---- reset buttons
 $("btn-resettrip").onclick = () => {
   if (!confirm("Start a new trip? The current one is kept in Saved trips.")) return;
-  saveTrip(); newTrip(); hist.length = 0; drawChart(); render();
+  saveTrip(); newTrip(); hist.length = 0; drawChart(); drawTrends(); render();
 };
 $("btn-cleartrips").onclick = () => {
   if (!loadTrips().length) return;
@@ -669,6 +691,79 @@ function drawChart(){
   cx.fillText("160", 4, 14); cx.fillText("0", 4, H-6);
 }
 
+// ---- Trends: km/L and speed over time
+let trendRange = 600;   // seconds; 0 = whole trip
+document.getElementById("trend-seg").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  trendRange = +b.dataset.r;
+  for (const x of document.querySelectorAll("#trend-seg button")) x.classList.toggle("on", x === b);
+  drawTrends();
+});
+function bucketize(pts, t0, t1, n){
+  // per bucket: distance (km), fuel (L), seconds, so km/L = distance ÷ fuel (smooth, honest)
+  const B = Array.from({length:n}, () => ({d:0, f:0, s:0, n:0}));
+  const span = Math.max(1, t1 - t0);
+  for (const p of pts){
+    const i = Math.min(n-1, Math.max(0, Math.floor((p.t - t0)/span*n)));
+    B[i].d += p.s/3600; B[i].f += p.f/3600; B[i].s += p.s; B[i].n++;
+  }
+  return B.map((b, i) => ({ t: t0 + (i+0.5)*span/n, n: b.n,
+    speed: b.n ? b.s/b.n : null,
+    kmpl: b.n && b.s/b.n >= 3 && b.f > 0 ? Math.min(30, b.d/b.f) : null }));
+}
+function drawTrend(cv, buckets, key, color, ref, unit, minMax, step){
+  const ctx = cv.getContext("2d"), dpr = window.devicePixelRatio || 1;
+  const W = cv.clientWidth, H = cv.clientHeight;
+  if (!W) return;
+  if (cv.width !== Math.round(W*dpr) || cv.height !== Math.round(H*dpr)){ cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr); }
+  ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,W,H);
+  const L = 30, R = 6, T = 6, Bm = 18, pw = W-L-R, ph = H-T-Bm;
+  const vals = buckets.map(b => b[key]).filter(v => v != null);
+  const ymax = Math.max(minMax, Math.ceil(Math.max(0, ...vals, ref || 0)/step)*step);
+  const y = v => T + ph - v/ymax*ph, x = i => L + (i+0.5)/buckets.length*pw;
+  ctx.font = "10px -apple-system,sans-serif"; ctx.fillStyle = "#8693a1"; ctx.strokeStyle = "#232a32"; ctx.lineWidth = 1;
+  for (let v = 0; v <= ymax + 1e-9; v += step){
+    ctx.beginPath(); ctx.moveTo(L, y(v)); ctx.lineTo(W-R, y(v)); ctx.stroke();
+    ctx.textAlign = "right"; ctx.fillText(String(v), L-5, y(v)+3);
+  }
+  if (!buckets.length) return;
+  const t0 = buckets[0].t, t1 = buckets[buckets.length-1].t, clock = t => new Date(t*1000).toTimeString().slice(0,5);
+  ctx.textAlign = "left"; ctx.fillText(clock(t0), L, H-4);
+  ctx.textAlign = "right"; ctx.fillText(clock(t1), W-R, H-4);
+  if (!vals.length){ ctx.textAlign = "center"; ctx.fillText("no data yet — start driving", L+pw/2, T+ph/2); return; }
+  // area + line, broken where there is no value
+  ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.fillStyle = color + "22";
+  let run = [];
+  const flush = () => {
+    if (!run.length) return;
+    ctx.beginPath(); run.forEach(([px,py], k) => k ? ctx.lineTo(px,py) : ctx.moveTo(px,py)); ctx.stroke();
+    ctx.lineTo(run[run.length-1][0], y(0)); ctx.lineTo(run[0][0], y(0)); ctx.closePath(); ctx.fill();
+    if (run.length === 1){ ctx.beginPath(); ctx.arc(run[0][0], run[0][1], 2, 0, 7); ctx.fillStyle = color; ctx.fill(); ctx.fillStyle = color + "22"; }
+    run = [];
+  };
+  buckets.forEach((b, i) => { if (b[key] == null) flush(); else run.push([x(i), y(b[key])]); });
+  flush();
+  if (ref){
+    ctx.setLineDash([5,4]); ctx.strokeStyle = "#8693a1"; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(L, y(ref)); ctx.lineTo(W-R, y(ref)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = "#c9d2db"; ctx.textAlign = "left"; ctx.fillText(`avg ${ref.toFixed(1)} ${unit}`, L+4, y(ref)-4);
+  }
+}
+function drawTrends(){
+  const now = series.length ? series[series.length-1].t : Date.now()/1000;
+  const t0 = trendRange ? now - trendRange : (series.length ? series[0].t : now - 60);
+  const pts = series.filter(p => p.t >= t0);
+  const cvK = $("c-kmpl"), n = Math.max(10, Math.min(120, Math.floor((cvK.clientWidth || 300)/5)));
+  const buckets = bucketize(pts, t0, now, n);
+  const tr = state.trip || {};
+  const moving = pts.filter(p => p.s >= 3), avgSpeed = moving.length ? moving.reduce((a,p) => a+p.s, 0)/moving.length : null;
+  drawTrend(cvK, buckets, "kmpl", "#3ddc84", tr.avg_kmpl, "km/L", 15, 5);
+  drawTrend($("c-speed"), buckets, "speed", "#3fb6ff", avgSpeed, "km/h", 60, 20);
+  const kv = buckets.map(b => b.kmpl).filter(v => v != null);
+  $("t-kmpl-note").textContent = kv.length ? `best ${Math.max(...kv).toFixed(1)} · worst ${Math.min(...kv).toFixed(1)}` : "";
+  $("t-speed-note").textContent = pts.length ? `max ${Math.max(...pts.map(p => p.s)).toFixed(0)}${avgSpeed ? ` · avg moving ${avgSpeed.toFixed(0)}` : ""}` : "";
+}
+
 function decodeDtc(lines){
   if (!lines || !lines.length) return "no answer";
   const h = lines.join("").replace(/\s|\d:/g,"").toUpperCase();
@@ -743,9 +838,15 @@ function render(){
   $("tr-avg").textContent = tr.avg_kmpl != null ? `${fmt(tr.avg_kmpl,1)} km/L` : "—";
 
   // ---- fuel card
-  if (v.kmpl != null){ $("f-now").textContent = fmt(v.kmpl,1); $("f-now-u").textContent = "km/L"; }
-  else if (v.lph != null){ $("f-now").textContent = fmt(v.lph,1); $("f-now-u").textContent = (v.speed||0) <= 5 ? "L/h idle" : "L/h"; }
-  else { $("f-now").textContent = "—"; $("f-now-u").textContent = "km/L"; }
+  if (v.kmpl != null){
+    $("f-now-l").textContent = "Live km/L";
+    $("f-now").textContent = fmt(v.kmpl,1); $("f-now-u").textContent = "km/L";
+    $("f-now-s").textContent = `burning ${fmt(v.lph,1)} L/h`;
+  } else if (v.lph != null){
+    $("f-now-l").textContent = "Live · stopped";
+    $("f-now").textContent = fmt(v.lph,1); $("f-now-u").textContent = "L/h";
+    $("f-now-s").textContent = "km/L shows above 5 km/h";
+  } else { $("f-now-l").textContent = "Live km/L"; $("f-now").textContent = "—"; $("f-now-u").textContent = "km/L"; $("f-now-s").textContent = "connect to see"; }
   $("f-avg").textContent = tr.avg_kmpl != null ? fmt(tr.avg_kmpl,1) : "—";
   $("f-time").textContent = hms(tr.elapsed_s);
   $("f-dist").textContent = tr.dist_km != null ? `${fmt(tr.dist_km,1)} km · ${fmt(tr.fuel_l,2)} L used` : "";
@@ -779,16 +880,16 @@ function render(){
     lastHist = now;
     hist.push({t:now, speed:v.speed, coolant:v.coolant, rpm:v.rpm});
     while (hist.length && hist[0].t < now - 600) hist.shift();
-    drawChart();
+    drawChart(); drawTrends();
   }
 }
 
 $("bt-support").innerHTML = navigator.bluetooth
   ? "✅ This browser supports Web Bluetooth."
   : "⚠️ This browser has no Web Bluetooth (Safari/Chrome on iPhone don't). Open this page in <b>Bluefy</b>.";
-window.addEventListener("resize", drawChart);
+window.addEventListener("resize", () => { drawChart(); drawTrends(); });
 window.addEventListener("pagehide", saveTrip);
-renderTrips(); drawChart(); render();
+renderTrips(); drawChart(); drawTrends(); render();
 setInterval(render, 250);
 </script>
 </body>
