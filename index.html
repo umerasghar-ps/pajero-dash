@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0b0d10">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
 <title>Pajero Live</title>
 <style>
   :root{
@@ -107,7 +110,8 @@
   <p>Ignition ON, Car Scanner closed, then tap <b>Connect</b> and pick <b>OBDII</b>.
   Needs a Web Bluetooth browser — on iPhone use <b>Bluefy</b>. Keep the screen on while driving.</p>
   <p id="bt-support"></p>
-  <p><button id="btn-demo">Try demo data</button></p>
+  <p><button id="btn-demo">Try demo data</button> <button id="btn-install" style="display:none">⬇︎ Install app (works offline)</button></p>
+  <p>Works without internet after the first visit. On Android Chrome: ⋮ menu → <b>Add to Home screen</b> / <b>Install app</b>.</p>
 </div>
 
 <div class="grid gauges">
@@ -890,6 +894,20 @@ $("bt-support").innerHTML = navigator.bluetooth
 window.addEventListener("resize", () => { drawChart(); drawTrends(); });
 window.addEventListener("pagehide", saveTrip);
 renderTrips(); drawChart(); drawTrends(); render();
+
+// offline support: save the app on this device (works without internet after the first visit)
+let installEvt = null;
+window.addEventListener("beforeinstallprompt", e => {            // Android Chrome: offer "Install app"
+  e.preventDefault(); installEvt = e; $("btn-install").style.display = "inline-block";
+});
+$("btn-install").onclick = async () => {
+  if (!installEvt) return;
+  installEvt.prompt(); await installEvt.userChoice; installEvt = null; $("btn-install").style.display = "none";
+};
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")){
+  navigator.serviceWorker.register("sw.js").then(() => dbg("offline copy ready")).catch(e => dbg("offline copy not available: " + e.message));
+}
+$("bt-support").innerHTML += navigator.onLine ? "" : "<br>📴 Offline — running from the copy saved on this device.";
 setInterval(render, 250);
 </script>
 </body>
