@@ -175,6 +175,10 @@
       <div class="row"><div class="label">Saved trips (on this phone)</div><button id="btn-endtrip">End trip</button></div>
       <div class="trips" id="trips"></div>
     </div>
+    <details class="card">
+      <summary class="label">Connection log</summary>
+      <pre id="dbg" style="white-space:pre-wrap;font-size:11px;color:var(--muted);margin:8px 0 0">nothing yet</pre>
+    </details>
   </div>
 </div>
 
@@ -226,11 +230,20 @@ function parseMode01(lines, wanted){
 }
 
 // ================================================================ ELM327 over Web Bluetooth
+// one notification handler for the whole page, so reconnects never stack listeners
+let activeElm = null, notifyChar = null;
+function onNotify(e){ if (activeElm) activeElm.feed(e.target.value); }
+
 class Elm {
   constructor(){ this.buf = ""; this.waiter = null; this.dec = new TextDecoder(); this.enc = new TextEncoder(); }
+  feed(value){
+    this.buf += this.dec.decode(value);
+    if (this.buf.includes(">") && this.waiter){ const r = this.waiter; this.waiter = null; r(); }
+  }
   async connect(device){
     this.device = device;
-    const server = await device.gatt.connect();
+    const server = device.gatt.connected ? device.gatt : await device.gatt.connect();
+    dbg("GATT connected");
     let w = null, n = null;
     for (const svc of await server.getPrimaryServices()){
       for (const ch of await svc.getCharacteristics()){
@@ -241,23 +254,39 @@ class Elm {
       if (w && n) break;
     }
     if (!w || !n) throw new Error("adapter has no serial characteristic");
+    dbg(`write ${w.uuid.slice(4,8)} (${w.properties.writeWithoutResponse ? "no-resp" : "resp"}), notify ${n.uuid.slice(4,8)}`);
     this.w = w; this.n = n;
-    n.addEventListener("characteristicvaluechanged", e => {
-      this.buf += this.dec.decode(e.target.value);
-      if (this.buf.includes(">") && this.waiter){ const r = this.waiter; this.waiter = null; r(); }
-    });
-    await n.startNotifications();
+    activeElm = this;
+    if (notifyChar && notifyChar !== n) notifyChar.removeEventListener("characteristicvaluechanged", onNotify);
+    n.removeEventListener("characteristicvaluechanged", onNotify);
+    n.addEventListener("characteristicvaluechanged", onNotify);
+    notifyChar = n;
+    try { await n.startNotifications(); dbg("notifications on"); }
+    catch (err){
+      if (/already/i.test(err.message || "")) dbg("notifications were already on — reusing");
+      else throw err;
+    }
   }
   async cmd(s, timeout=4000){
     this.buf = "";
     const done = new Promise(r => this.waiter = r);
     const data = this.enc.encode(s + "\r");
-    if (this.w.properties.writeWithoutResponse && this.w.writeValueWithoutResponse) await this.w.writeValueWithoutResponse(data);
+    if (this.w.properties.write && this.w.writeValueWithResponse) await this.w.writeValueWithResponse(data);
+    else if (this.w.properties.writeWithoutResponse && this.w.writeValueWithoutResponse) await this.w.writeValueWithoutResponse(data);
     else await this.w.writeValue(data);
     await Promise.race([done, sleep(timeout)]);
     this.waiter = null;
     return this.buf.replace(/>/g,"").split(/[\r\n]+/).map(x => x.trim()).filter(x => x && x !== s);
   }
+}
+
+// ---- on-screen connection log (helps diagnose adapters/browsers)
+const dbgLines = [];
+function dbg(msg){
+  dbgLines.push(`${new Date().toTimeString().slice(0,8)}  ${msg}`);
+  while (dbgLines.length > 40) dbgLines.shift();
+  const el = document.getElementById("dbg");
+  if (el) el.textContent = dbgLines.join("\n");
 }
 
 // ================================================================ state, trip, logging
@@ -353,8 +382,13 @@ let elm = null, running = false, demoTimer = null;
 
 async function pollLoop(){
   const e = elm;
-  for (const c of ["ATZ","ATE0","ATL0","ATS0","ATH0","ATSP6","ATAT2"]) await e.cmd(c, 3000);
-  await e.cmd("0100", 10000);
+  for (const c of ["ATZ","ATE0","ATL0","ATS0","ATH0","ATSP6","ATAT2"]){
+    const r = await e.cmd(c, 3000);
+    if (c === "ATZ") dbg("adapter: " + (r.join(" ") || "(no reply)"));
+  }
+  const r0 = await e.cmd("0100", 10000);
+  dbg("car reply 0100: " + (r0.join(" ") || "(no reply)"));
+  if (!hexblob(r0).includes("4100")) throw new Error("car did not answer — ignition on?");
   state.dtc_raw = { stored: await e.cmd("03", 6000), pending: await e.cmd("07", 6000) };
   state.connected = true; state.status = "live";
   let si = 0, nReq = 0, tRate = Date.now();
@@ -382,7 +416,9 @@ async function connect(){
     const device = await navigator.bluetooth.requestDevice({
       filters: [{ name: ADAPTER_NAME }, { namePrefix: "OBD" }, { namePrefix: "V-LINK" }, { namePrefix: "IOS-Vlink" }],
       optionalServices: SERVICES });
+    dbg(`picked ${device.name || "(no name)"}`);
     device.addEventListener("gattserverdisconnected", () => {
+      dbg("Bluetooth link dropped");
       state.connected = false; state.status = "disconnected — reconnecting…"; render();
     });
     running = true; $("btn-connect").textContent = "Disconnect";
@@ -394,7 +430,8 @@ async function connect(){
         elm = new Elm(); await elm.connect(device);
         await pollLoop();
       } catch (err){
-        console.error(err); state.connected = false; state.status = "error: " + (err.message || err).toString().slice(0,60);
+        console.error(err); dbg("ERROR: " + (err.message || err));
+        state.connected = false; state.status = "error: " + (err.message || err).toString().slice(0,60);
       }
       saveTrip();
       if (running) await sleep(3000);
