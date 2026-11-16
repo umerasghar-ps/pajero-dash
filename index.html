@@ -172,6 +172,101 @@
     .big{font-size:24px}
     .kv{grid-template-columns:repeat(2,1fr)}
   }
+
+  /* ================= PRO VIEW: full-screen 1024×600 design, scaled to fit ================= */
+  #pro{display:none;position:fixed;inset:0;z-index:40;background:#05070b;overflow:hidden;
+    font-family:"Roboto","Segoe UI",system-ui,-apple-system,sans-serif;-webkit-user-select:none;user-select:none;
+    --p-panel:#0c1016;--p-panel2:#10151d;--p-line:#1c2430;--p-dim:#5b6573;--p-txt:#e9eef5;--p-blue:#33a6ff;--p-cyan:#2fd4ff;
+    --p-violet:#9c7bff;--p-pink:#ff5fa2;--p-amber:#ffb020;--p-orange:#ff8a1f;--p-green:#3ddc84;--p-red:#ff3b4e}
+  body.pro{overflow:hidden} body.pro #pro{display:block}
+  body.overheat #pro{animation:ohbg 1s infinite}
+  body.overheat #pro .pc{border-color:var(--p-red)}
+  #p-stage{position:absolute;left:0;top:0;width:1024px;height:600px;transform-origin:0 0;display:flex;flex-direction:column;color:var(--p-txt)}
+  #pro .num{font-variant-numeric:tabular-nums;font-weight:700;letter-spacing:-.5px}
+  #pro .lbl{font-size:12px;font-weight:600;letter-spacing:1.6px;text-transform:uppercase}
+  #pro .pc{background:linear-gradient(180deg,var(--p-panel2),var(--p-panel));border:1px solid var(--p-line);border-radius:10px;position:relative;overflow:hidden}
+  #pro .tap{cursor:pointer}
+
+  #p-head{height:50px;display:flex;align-items:center;gap:10px;padding:0 12px;border-bottom:1px solid #3a2a6a;
+    background:linear-gradient(90deg,#070a10,#0b0f18);box-shadow:0 1px 0 #6c4cff55}
+  #pro .logo{flex:none;width:24px;height:24px;border-radius:50%;background:conic-gradient(var(--p-cyan),var(--p-violet),var(--p-pink),var(--p-cyan));
+    -webkit-mask:radial-gradient(circle,transparent 6px,#000 7px);mask:radial-gradient(circle,transparent 6px,#000 7px)}
+  #pro .brand{font-size:19px;font-weight:800;white-space:nowrap;background:linear-gradient(90deg,var(--p-cyan),var(--p-violet));-webkit-background-clip:text;background-clip:text;color:transparent}
+  #p-mode{font-size:14px;font-weight:800;color:var(--p-amber);text-shadow:0 0 10px #ffb02088;letter-spacing:.5px;min-width:68px}
+  #p-demo{font-size:10px;font-weight:800;color:#000;background:var(--p-amber);border-radius:4px;padding:2px 5px;letter-spacing:1px;display:none}
+  /* water bar (same alarm as the classic view) */
+  #p-wt{flex:1;min-width:0;display:flex;align-items:center;gap:8px;height:36px;padding:0 10px;border-radius:9px;
+    border:1px solid var(--p-line);background:#0d1219;cursor:pointer;font-variant-numeric:tabular-nums}
+  #p-wt .l{font-size:12px;font-weight:700;letter-spacing:1px;color:#9fb4c8;white-space:nowrap}
+  #p-wt .tr{flex:1;height:12px;border-radius:6px;background:#1b212b;overflow:hidden;position:relative}
+  #p-wt .tr i{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:6px;background:var(--p-green);transition:width .5s,background .3s}
+  #p-wt .v{font-size:20px;font-weight:800;white-space:nowrap} #p-wt .v small{font-size:12px;font-weight:600;color:#aab3bf}
+  #p-wt .s{font-size:11px;color:#aab3bf;white-space:nowrap;max-width:96px;overflow:hidden;text-overflow:ellipsis}
+  #p-wt.cold .tr i{background:var(--p-blue)}
+  #p-wt.warn{border-color:var(--p-amber)} #p-wt.warn .tr i{background:var(--p-amber)} #p-wt.warn .v{color:var(--p-amber)}
+  #p-wt.hot{border-color:var(--p-red);animation:wtflash .8s infinite} #p-wt.hot .tr i{background:var(--p-red)}
+  #pro .live{font-size:12px;color:#c9d2de;display:flex;align-items:center;gap:6px;white-space:nowrap;max-width:110px;overflow:hidden}
+  #pro .ldot{flex:none;width:8px;height:8px;border-radius:50%;background:#666}
+  #pro .ldot.on{background:var(--p-green);box-shadow:0 0 8px var(--p-green)}
+  #p-clock{font-size:17px;font-weight:700}
+  #pro .hb{font:600 13px/1 inherit;font-family:inherit;color:#dfe6ee;background:#141a23;border:1px solid #2a3340;border-radius:8px;padding:8px 10px;cursor:pointer;white-space:nowrap}
+  #pro .hb.pri{background:var(--p-blue);border-color:var(--p-blue);color:#04121c}
+
+  #p-main{flex:1;display:grid;padding:6px;gap:6px;grid-template-columns:505px 1fr 1fr 1fr;grid-template-rows:226px 70px 150px 1fr}
+  #p-speed{grid-column:1;grid-row:1}
+  #p-vaccard{grid-column:1;grid-row:2;display:flex;align-items:center;padding:0 14px;gap:16px}
+  #pro .pbar{grid-row:1/3;display:flex;flex-direction:column;align-items:center;padding:6px 6px 8px}
+  #pro .pbar .v{font-size:31px;line-height:1} #pro .pbar .u{font-size:12px;color:#cdd5df;margin:3px 0 5px}
+  #p-bottom{grid-column:1/5;grid-row:3;display:grid;gap:6px;grid-template-columns:78px 1fr 120px 164px 122px 122px}
+  #p-icons{grid-column:1/5;grid-row:4;display:flex;justify-content:space-around;align-items:center;padding:0 40px}
+
+  #p-arc{position:absolute;left:10px;top:0}
+  #pro .rpmv{position:absolute;left:28px;top:22px;font-size:20px} #pro .rpmu{position:absolute;left:30px;top:46px;font-size:11px;color:#aab3bf}
+  #p-spd{position:absolute;left:0;right:0;top:84px;text-align:center;font-size:92px;line-height:1}
+  #pro .spdu{position:absolute;right:58px;top:142px;font-size:15px;font-weight:700;color:#cdd5df}
+  #pro .spdl{position:absolute;left:0;right:0;bottom:10px;text-align:center}
+
+  #pro .vacl{display:flex;flex-direction:column;gap:2px;min-width:118px}
+  #pro .vacl .lbl{color:var(--p-violet);font-size:11px} #pro .vacl .num{font-size:27px} #pro .vacl small{font-size:12px;color:#aab3bf;font-weight:600}
+  #pro .vacscale{flex:1;position:relative;height:50px}
+  #pro .ticks{position:absolute;left:0;right:0;top:0;display:flex;justify-content:space-between;font-size:11px;color:#aab3bf;font-weight:600}
+  #pro .track{position:absolute;left:0;right:0;top:24px;height:16px;border-radius:8px;background:#1b212b}
+  #p-vacfill{position:absolute;left:0;top:24px;height:16px;border-radius:8px;background:linear-gradient(90deg,#7a5cff,#c46bff);transition:width .25s}
+  #p-vacmax{position:absolute;right:0;bottom:-4px;font-size:9px;color:#aab3bf;font-weight:700}
+
+  #pro .ttl{position:absolute;left:10px;top:9px}
+  #p-tank{display:flex;flex-direction:column;align-items:center;padding:8px 4px 6px}
+  #p-tank .v{font-size:23px;line-height:1;margin-top:3px} #p-tank .u{font-size:10px;color:#cdd5df}
+  #p-eco{padding:30px 16px 10px;display:flex;gap:18px;align-items:center}
+  #pro .ecobig{display:flex;flex-direction:column;min-width:150px}
+  #pro .ecobig .num{font-size:58px;line-height:1;color:var(--p-green)} #pro .ecobig small{color:#cdd5df;font-weight:700;font-size:14px}
+  #pro .ecogrid{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:8px 14px}
+  #pro .ecogrid div{display:flex;flex-direction:column}
+  #pro .ecogrid b{font-size:22px;font-variant-numeric:tabular-nums}
+  #pro .ecogrid span{font-size:10px;color:var(--p-dim);font-weight:700;letter-spacing:1.2px;text-transform:uppercase;white-space:nowrap}
+  #p-gear{display:flex;flex-direction:column;align-items:center;justify-content:center;padding-top:14px}
+  #p-gear .num{font-size:72px;line-height:1;color:var(--p-blue);text-shadow:0 0 18px #33a6ff66}
+  #p-gear small{font-size:17px;font-weight:800;letter-spacing:3px;color:#aab3bf}
+  #p-trim{padding:32px 12px 8px}
+  #pro .trimrow{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px}
+  #pro .trimrow span{white-space:nowrap;font-size:11px;color:var(--p-dim);font-weight:700;letter-spacing:1px}
+  #pro .trimrow b{font-size:19px;font-variant-numeric:tabular-nums}
+  #pro .trimbar{height:6px;border-radius:3px;background:#1b212b;position:relative;margin:2px 0 10px}
+  #pro .trimbar i{position:absolute;top:0;height:6px;border-radius:3px}
+  #pro .trimbar:after{content:"";position:absolute;left:50%;top:-3px;width:2px;height:12px;background:#fff8}
+  #p-batt{padding:30px 12px 8px}
+  #p-batt .num{font-size:50px;line-height:1;color:var(--p-orange)}
+  #p-bst{font-size:13px;font-weight:800;margin-top:6px} #p-bsub{font-size:11px;color:#aab3bf;font-weight:600;margin-top:2px}
+  #pro .vu{position:absolute;right:12px;bottom:8px;font-size:13px;color:#cdd5df}
+  #p-load{display:flex;align-items:center;justify-content:center;padding-top:16px}
+  #p-load .c{position:absolute;left:0;right:0;top:66px;text-align:center} #p-load .c b{font-size:28px;display:block;line-height:1} #p-load .c small{font-size:11px}
+
+  #pro .ico{width:58px;height:58px;border-radius:50%;display:grid;place-items:center;color:#4a525e}
+  #pro .ico svg{width:32px;height:32px}
+  #pro .ico.ok{color:var(--p-green);background:#0f2a22;box-shadow:0 0 0 1px #1d5a44 inset}
+  #pro .ico.warn{color:var(--p-amber);background:#2e2208;box-shadow:0 0 0 1px #6a4a10 inset}
+  #pro .ico.bad{color:#fff;background:var(--p-red);box-shadow:0 0 18px var(--p-red);animation:pico 1s infinite}
+  @keyframes pico{50%{box-shadow:0 0 4px var(--p-red)}}
 </style>
 </head>
 <body>
@@ -186,12 +281,85 @@
     <span class="wt-t" id="wt-trend"></span>
   </div>
   <span class="spacer"></span>
+  <button id="btn-pro" title="New full-screen design">✨ Pro view</button>
   <button id="btn-fs" title="Full screen">⛶</button>
   <button id="btn-more" class="caronly">More ▾</button>
   <button id="btn-carmode" title="Switch layout">🚗 Car mode</button>
   <button id="btn-retry">↻ Try again</button>
   <button id="btn-connect" class="primary">Connect</button>
 </header>
+
+<div id="pro"><div id="p-stage">
+  <div id="p-head">
+    <div class="logo"></div><div class="brand">Pajero Live</div>
+    <div id="p-mode">IDLE</div><span id="p-demo">DEMO</span>
+    <div id="p-wt" title="Tap to set the warning temperature"><span class="l">💧</span><div class="tr"><i id="p-wtfill"></i></div>
+      <span class="v"><span id="p-wtval">—</span> <small>°C</small></span><span class="s" id="p-wts"></span></div>
+    <div class="live"><span class="ldot" id="p-ldot"></span><span id="p-ltxt">not connected</span></div>
+    <div class="num" id="p-clock">--:--</div>
+    <button class="hb" id="p-fs" title="Full screen">⛶</button>
+    <button class="hb" id="p-demobtn">Demo</button>
+    <button class="hb" id="p-classic">Classic</button>
+    <button class="hb pri" id="p-conn">Connect</button>
+  </div>
+
+  <div id="p-main">
+    <section class="pc" id="p-speed">
+      <svg id="p-arc" width="484" height="222"></svg>
+      <div class="rpmv num" id="p-rpm">0</div><div class="rpmu">rpm</div>
+      <div class="num" id="p-spd">0</div><div class="spdu">km/h</div>
+      <div class="lbl spdl">Speed &amp; RPM</div>
+    </section>
+
+    <section class="pc" id="p-vaccard">
+      <div class="vacl"><span class="lbl">◎ Intake vacuum</span><span class="num" id="p-vac">— <small>kPa</small></span></div>
+      <div class="vacscale">
+        <div class="ticks"><span>0</span><span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>60</span><span>70</span></div>
+        <div class="track"></div><div id="p-vacfill" style="width:0"></div><div id="p-vacmax">MAX — kPa</div>
+      </div>
+    </section>
+
+    <section class="pc pbar"><svg id="p-bcool" width="150" height="196"></svg><div class="v num" id="p-vcool">--</div><div class="u">°C</div><div class="lbl">Engine</div></section>
+    <section class="pc pbar"><svg id="p-biat"  width="150" height="196"></svg><div class="v num" id="p-viat">--</div><div class="u">°C</div><div class="lbl">Intake air</div></section>
+    <section class="pc pbar"><svg id="p-bamb"  width="150" height="196"></svg><div class="v num" id="p-vamb">--</div><div class="u">°C</div><div class="lbl">Outside</div></section>
+
+    <div id="p-bottom">
+      <section class="pc tap" id="p-tank" title="Tap to set litres in the tank"><svg id="p-btank" width="70" height="104"></svg><div class="v num" id="p-vtank">--</div><div class="u">L</div><div class="lbl" style="font-size:9px;letter-spacing:1px">Tank</div></section>
+      <section class="pc tap" id="p-eco" title="Tap to start a new trip">
+        <span class="lbl ttl" style="color:var(--p-green)">Fuel economy</span>
+        <div class="ecobig"><span class="num" id="p-kmpl">--</span><small id="p-kmplu">km/L now</small></div>
+        <div class="ecogrid">
+          <div><b id="p-avg">--</b><span>Trip avg km/L</span></div>
+          <div><b id="p-lph">--</b><span>Burning L/h</span></div>
+          <div><b id="p-range">--</b><span>Range km</span></div>
+          <div><b id="p-trip">--</b><span id="p-triptime">Trip km</span></div>
+        </div>
+      </section>
+      <section class="pc" id="p-gear"><span class="lbl ttl" style="color:var(--p-blue)">Gear</span><span class="num" id="p-g">-</span><small id="p-gs">AUTO</small><small style="font-size:10px;letter-spacing:1px;color:var(--p-dim)">estimated</small></section>
+      <section class="pc" id="p-trim">
+        <span class="lbl ttl" style="color:var(--p-amber)">Fuel trim</span>
+        <div class="trimrow"><span>LONG TERM</span><b id="p-ltft">--</b></div><div class="trimbar"><i id="p-ltftbar"></i></div>
+        <div class="trimrow"><span>SHORT TERM</span><b id="p-stft">--</b></div><div class="trimbar"><i id="p-stftbar"></i></div>
+      </section>
+      <section class="pc" id="p-batt"><span class="lbl ttl" style="color:var(--p-orange)">Battery</span>
+        <div class="num" id="p-volt">--</div><div id="p-bst"></div><div id="p-bsub"></div><span class="vu">V</span></section>
+      <section class="pc" id="p-load"><span class="lbl ttl" style="color:var(--p-green)">Load</span>
+        <svg width="104" height="104" viewBox="0 0 104 104"><circle cx="52" cy="52" r="42" fill="none" stroke="#1d242e" stroke-width="9"/>
+          <circle id="p-loadring" cx="52" cy="52" r="42" fill="none" stroke="var(--p-green)" stroke-width="9" stroke-linecap="round" stroke-dasharray="0 264" transform="rotate(-90 52 52)"/></svg>
+        <div class="c"><b class="num" id="p-loadv">--</b><small>%</small></div></section>
+    </div>
+
+    <div id="p-icons">
+      <div class="ico" id="p-i-bt" title="Adapter link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7l10 10-5 4V3l5 4L7 17"/></svg></div>
+      <div class="ico" id="p-i-cel" title="Check engine"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 10h2V8h4V6h4v2h3l2 3h2v5h-2l-2 3H9l-2-2H4z"/><path d="M1 11v4"/></svg></div>
+      <div class="ico" id="p-i-hot" title="Water temperature"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v11"/><circle cx="12" cy="17" r="3"/><path d="M12 6h4M12 9h3M12 12h4"/><path d="M3 21c2-1.3 4-1.3 6 0s4 1.3 6 0 4-1.3 6 0"/></svg></div>
+      <div class="ico" id="p-i-bat" title="Charging"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="7" width="18" height="12" rx="2"/><path d="M7 4v3M17 4v3M6 13h4M15 11v4M13 13h4"/></svg></div>
+      <div class="ico" id="p-i-fuel" title="Fuel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 21V5a2 2 0 012-2h7a2 2 0 012 2v16M3 21h13M6 8h7"/><path d="M15 10h2a2 2 0 012 2v5a1.5 1.5 0 003 0V9l-3-3"/></svg></div>
+      <div class="ico" id="p-i-rpm" title="High RPM"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 18a9 9 0 1116 0"/><path d="M12 14l5-5"/></svg></div>
+      <div class="ico" id="p-i-eco" title="Economy driving"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M5 19c0-8 5-13 15-14-1 10-6 15-14 15"/><path d="M5 19l7-7"/></svg></div>
+    </div>
+  </div>
+</div></div>
 
 <div id="ohbanner">⚠ ENGINE HOT <span id="oh-temp"></span><small>Ease off · A/C off · heater full hot · pull over safely if it keeps rising<br>(tap to hide this box — the red screen stays until it cools)</small></div>
 
@@ -1056,6 +1224,7 @@ function render(){
     $("dtc").innerHTML = `Stored: <b>${s}</b> · Pending: <b>${p}</b><br><span class="sub">Generic decode — confirm in Car Scanner's fault-code screen.</span><br><code>raw ${(st.dtc_raw.stored||[]).join(" ")} | ${(st.dtc_raw.pending||[]).join(" ")}</code>`;
   }
   alerts(v);
+  if (window.PRO) PRO.render();
   const now = Date.now()/1000;
   if (st.connected && now - lastHist >= 1){
     lastHist = now;
@@ -1134,6 +1303,156 @@ if ("serviceWorker" in navigator && (location.protocol === "https:" || location.
   navigator.serviceWorker.register("sw.js").then(() => dbg("offline copy ready")).catch(e => dbg("offline copy not available: " + e.message));
 }
 $("bt-support").innerHTML += navigator.onLine ? "" : "<br>📴 Offline — running from the copy saved on this device.";
+
+// ================================================================ PRO VIEW (second layout, same data + same water alarm)
+window.PRO = (() => {
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const NS = "http://www.w3.org/2000/svg";
+  const el = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent && parent.appendChild(e); return e; };
+  function fit(){ if (!document.body.classList.contains("pro")) return;
+    const s = Math.min(innerWidth / 1024, innerHeight / 600), st = $("p-stage");
+    st.style.transform = `scale(${s})`; st.style.left = (innerWidth - 1024 * s) / 2 + "px"; st.style.top = (innerHeight - 600 * s) / 2 + "px"; }
+  addEventListener("resize", fit);
+
+  // speed/rpm arc
+  const RPM_MAX = 7000, RPM_RED = 6000, SEGS = 64, segs = [];
+  (() => { const cx = 242, cy = 210, r0 = 150, svg = $("p-arc");
+    for (let i = 0; i < SEGS; i++){
+      const f = i / (SEGS - 1), a = Math.PI * (1.08 - 1.16 * f), len = 16 + f * 30, w = 4 + f * 5;
+      const x = cx + Math.cos(a) * r0, y = cy - Math.sin(a) * r0;
+      segs.push(el("rect", { x: x - w / 2, y: y - len, width: w, height: len, rx: 1.5, transform: `rotate(${-a * 180 / Math.PI + 90} ${x} ${y})` }, svg));
+    } })();
+  let lastLit = -1;
+  function drawArc(rpm){
+    const lit = Math.round(clamp(rpm / RPM_MAX, 0, 1) * SEGS); if (lit === lastLit) return; lastLit = lit;
+    segs.forEach((s, i) => { const r = (i + 1) / SEGS * RPM_MAX, red = r > RPM_RED, hi = r > RPM_RED * .8;
+      s.setAttribute("fill", i < lit ? (red ? "#ff3b4e" : hi ? `hsl(345,100%,${88 - (r - RPM_RED * .8) / (RPM_RED * .2) * 12}%)` : "#f4f6fa")
+                                     : (red ? "#4a1420" : hi ? "#3a1a24" : "#1c222c")); });
+  }
+
+  // vertical bars
+  function makeBar(svg, o){
+    const H = +svg.getAttribute("height"), top = 9, bot = H - 9, x = o.x ?? 74, bw = o.bw ?? 22;
+    const y = v => bot - (clamp(v, o.min, o.max) - o.min) / (o.max - o.min) * (bot - top);
+    if (o.labels) for (let v = o.min; v <= o.max; v += o.step)
+      el("text", { x: x - 32, y: y(v) + 4, fill: "#e9eef5", "font-size": 12, "font-weight": 600, "text-anchor": "end" }, svg).textContent = v;
+    for (let v = o.min; v <= o.max + 1e-6; v += o.step / 5){
+      const major = Math.abs(((v - o.min) / o.step) - Math.round((v - o.min) / o.step)) < 1e-6;
+      el("line", { x1: x - (major ? 22 : 16), x2: x - 9, y1: y(v), y2: y(v), stroke: v >= o.red ? "#ff3b4e" : "#8a94a3", "stroke-width": major ? 1.6 : 1 }, svg);
+    }
+    if (o.red < o.max) el("line", { x1: x - 9, x2: x - 9, y1: y(o.max), y2: y(o.red), stroke: "#ff3b4e", "stroke-width": 3 }, svg);
+    el("rect", { x, y: top, width: bw, height: bot - top, rx: 3, fill: "#1b212b" }, svg);
+    const id = "pg" + svg.id, g = el("linearGradient", { id, x1: 0, x2: 0, y1: 1, y2: 0 }, el("defs", {}, svg));
+    el("stop", { offset: 0, "stop-color": o.c1 }, g); el("stop", { offset: 1, "stop-color": o.c2 }, g);
+    const fill = el("rect", { x, width: bw, rx: 3, fill: `url(#${id})` }, svg), tri = el("path", { fill: "#fff" }, svg);
+    if (o.icon){ el("text", { x: x + bw + 8, y: 30, "font-size": 22, fill: o.c2 }, svg).textContent = o.icon; }
+    return (v, redNow) => {
+      if (v == null || isNaN(v)){ fill.setAttribute("height", 0); tri.setAttribute("d", ""); return; }
+      const yy = y(v); fill.setAttribute("y", yy); fill.setAttribute("height", bot - yy);
+      tri.setAttribute("d", `M${x + bw + 4} ${yy} l14 -8 v16 z`);
+      fill.setAttribute("fill", (redNow ?? v >= o.red) ? "#ff3b4e" : `url(#${id})`);
+    };
+  }
+  const bCool = makeBar($("p-bcool"), { min: 40, max: 120, step: 10, red: 105, c1: "#1fd2ff", c2: "#2f86ff", labels: 1, icon: "🌡" });
+  const bIat  = makeBar($("p-biat"),  { min: 0, max: 100, step: 20, red: 75, c1: "#7a5cff", c2: "#a98bff", labels: 1, icon: "≋" });
+  const bAmb  = makeBar($("p-bamb"),  { min: 0, max: 60, step: 10, red: 50, c1: "#ff4f95", c2: "#ff8ab8", labels: 1, icon: "☀" });
+  const bTank = makeBar($("p-btank"), { min: 0, max: 100, step: 20, red: 999, c1: "#ffb020", c2: "#3ddc84", x: 34, bw: 14 });
+
+  // gear estimate (Pajero 3.8 5-speed auto; km/h per 1000 rpm — calibrate on the road)
+  const KMH_PER_1000 = [9.3, 17.1, 25.2, 35.3, 49.7];
+  function gearOf(speed, rpm){
+    if (speed < 3) return "N"; if (!rpm || rpm < 500) return "-";
+    const k = speed / (rpm / 1000); let best = 0, err = 1e9;
+    KMH_PER_1000.forEach((g, i) => { const e = Math.abs(Math.log(k / g)); if (e < err){ err = e; best = i; } });
+    return err < .18 ? String(best + 1) : "-";
+  }
+
+  let vacMax = 0;
+  const ico = (id, cls) => { const c = "ico " + (cls || ""); if ($(id).className !== c) $(id).className = c; };
+  const txt = (id, s) => { const e = $(id); if (e.textContent !== s) e.textContent = s; };
+  function render(){
+    if (!document.body.classList.contains("pro")) return;
+    const st = state, v = st.values, tr = st.trip || {}, run = (v.rpm || 0) > 400;
+    // header
+    txt("p-mode", (v.speed || 0) > 70 ? "HIGHWAY" : (v.speed || 0) > 2 ? "CITY" : run ? "IDLE" : "PARKED");
+    $("p-demo").style.display = st.demo ? "inline-block" : "none";
+    $("p-demobtn").style.display = st.connected || running ? "none" : "inline-block";
+    $("p-ldot").className = "ldot" + (st.connected ? " on" : "");
+    txt("p-ltxt", st.connected ? (st.demo ? "Demo data" : "Live data") : st.status);
+    const d = new Date(); txt("p-clock", d.getHours() + ":" + String(d.getMinutes()).padStart(2, "0"));
+    txt("p-conn", st.demo ? "Stop demo" : running ? "Disconnect" : currentDevice ? "↻ Try again" : "Connect");
+    // water bar: mirrors the classic bar (same thresholds, freshness check, beep, red screen)
+    const w = $("wt"); $("p-wt").className = ["cold", "warn", "hot"].filter(c => w.classList.contains(c)).join(" ");
+    txt("p-wtval", $("wt-val").textContent); txt("p-wts", $("wt-pct").textContent);
+    $("p-wtfill").style.width = $("wt-fill").style.width || "0";
+    // speed + rpm
+    drawArc(v.rpm || 0); txt("p-rpm", fmt(v.rpm)); txt("p-spd", v.speed == null ? "0" : fmt(v.speed));
+    // vacuum
+    if (v.map != null && v.baro != null){ const vac = Math.max(0, v.baro - v.map); vacMax = Math.max(vacMax, vac);
+      $("p-vac").innerHTML = `${Math.round(vac)} <small>kPa</small>`; $("p-vacfill").style.width = clamp(vac / 70 * 100, 0, 100) + "%";
+      txt("p-vacmax", `MAX ${Math.round(vacMax)} kPa`); }
+    // temperatures
+    bCool(v.coolant, v.coolant >= wt.hot); txt("p-vcool", fmt(v.coolant));
+    bIat(v.iat); txt("p-viat", fmt(v.iat)); bAmb(v.ambient); txt("p-vamb", fmt(v.ambient));
+    // fuel
+    bTank(fuel.left != null ? fuel.left / fuel.tank * 100 : null); txt("p-vtank", fuel.left != null ? fmt(fuel.left) : "--");
+    if (v.kmpl != null){ txt("p-kmpl", fmt(v.kmpl, 1)); txt("p-kmplu", "km/L now"); }
+    else if (v.lph != null){ txt("p-kmpl", fmt(v.lph, 1)); txt("p-kmplu", "L/h · stopped"); }
+    else { txt("p-kmpl", "--"); txt("p-kmplu", "km/L now"); }
+    txt("p-avg", tr.avg_kmpl != null ? fmt(tr.avg_kmpl, 1) : "--"); txt("p-lph", v.lph != null ? fmt(v.lph, 1) : "--");
+    const kmpl = fuel.km > 20 && fuel.l > 0 ? fuel.km / fuel.l : (tr.avg_kmpl && tr.dist_km > 2 ? tr.avg_kmpl : DEFAULT_KMPL);
+    txt("p-range", fuel.left != null ? String(Math.round(fuel.left * kmpl)) : "--");
+    txt("p-trip", tr.dist_km != null ? fmt(tr.dist_km, 1) : "--"); txt("p-triptime", `Trip km · ${hms(tr.elapsed_s)}`.replace("Trip km", "km"));
+    // gear
+    const g = gearOf(v.speed || 0, v.rpm || 0); txt("p-g", g); txt("p-gs", g === "N" ? "STOPPED" : "AUTO");
+    // trims
+    const trim = (k) => { const x = v[k]; if (x == null) return; txt("p-" + k, `${x > 0 ? "+" : ""}${fmt(x, 1)}%`);
+      const b = $("p-" + k + "bar"); b.style.left = (x >= 0 ? 50 : 50 + Math.max(-25, x) * 2) + "%"; b.style.width = Math.min(50, Math.abs(x) * 2) + "%";
+      b.style.background = Math.abs(x) >= 20 ? "var(--p-red)" : Math.abs(x) >= 10 ? "var(--p-amber)" : "var(--p-green)"; };
+    trim("ltft"); trim("stft");
+    // battery
+    if (v.volts != null){ txt("p-volt", fmt(v.volts, 1));
+      const s = !run ? (v.volts < 12.2 ? ["▼ LOW", "var(--p-red)", "engine off · weak"] : ["ENGINE OFF", "#aab3bf", "battery OK"])
+              : v.volts < 13.2 ? ["▼ LOW", "var(--p-red)", "check alternator"] : v.volts > 14.9 ? ["▲ HIGH", "var(--p-red)", "over-charging"] : ["▲ CHARGING", "var(--p-green)", "alternator OK"];
+      txt("p-bst", s[0]); $("p-bst").style.color = s[1]; txt("p-bsub", s[2]); }
+    // load
+    if (v.load != null){ txt("p-loadv", fmt(v.load)); const r = $("p-loadring");
+      r.setAttribute("stroke-dasharray", `${clamp(v.load, 0, 100) / 100 * 264} 264`);
+      r.setAttribute("stroke", v.load > 80 ? "var(--p-red)" : v.load > 55 ? "var(--p-amber)" : "var(--p-green)"); }
+    // warning lights
+    const codes = st.dtc_raw ? decodeDtc(st.dtc_raw.stored) : null;
+    ico("p-i-bt", st.connected ? "ok" : currentDevice ? "warn" : "");
+    ico("p-i-cel", codes && codes !== "none" && codes !== "no answer" ? "bad" : codes === "none" ? "ok" : "");
+    ico("p-i-hot", v.coolant == null ? "" : v.coolant >= wt.hot ? "bad" : v.coolant >= wt.warn ? "warn" : v.coolant >= 70 ? "ok" : "");
+    ico("p-i-bat", v.volts == null ? "" : run && (v.volts < 13.2 || v.volts > 14.9) ? "bad" : !run && v.volts < 12.2 ? "warn" : "ok");
+    ico("p-i-fuel", fuel.left == null ? "" : fuel.left < 8 ? "bad" : fuel.left < 15 ? "warn" : "ok");
+    ico("p-i-rpm", (v.rpm || 0) >= RPM_RED ? "bad" : (v.rpm || 0) > 4500 ? "warn" : "");
+    ico("p-i-eco", v.kmpl != null && v.kmpl >= 9 ? "ok" : "");
+  }
+
+  // buttons / taps reuse the classic controls, so behaviour is identical
+  $("p-conn").onclick = () => { primeAudio();
+    if (state.demo){ stopDemo(); render(); return; }
+    if (!running && currentDevice && !state.connected) tryAgain(); else $("btn-connect").click(); };
+  $("p-fs").onclick = () => $("btn-fs").click();
+  $("p-wt").onclick = () => $("wt").click();
+  $("p-tank").onclick = () => $("btn-setfuel").click();
+  $("p-eco").onclick = () => $("btn-resettrip").click();
+  $("p-classic").onclick = () => setView("classic");
+  $("p-demobtn").onclick = () => { primeAudio(); startDemo(); render(); };
+
+  const VIEW_KEY = "pajero.view";
+  function setView(vw){
+    document.body.classList.toggle("pro", vw === "pro");
+    try { localStorage.setItem(VIEW_KEY, vw); } catch {}
+    fit(); render(); if (vw !== "pro") requestAnimationFrame(() => { drawChart(); drawTrends(); });
+  }
+  $("btn-pro").onclick = () => setView("pro");
+  const q = new URLSearchParams(location.search).get("view");
+  let pref = null; try { pref = localStorage.getItem(VIEW_KEY); } catch {}
+  setView(q === "pro" || q === "classic" ? q : pref || "classic");
+  return { render };
+})();
 setInterval(render, 250);
 </script>
 </body>
