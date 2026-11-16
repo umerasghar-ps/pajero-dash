@@ -72,7 +72,13 @@
   .seg{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
   .seg button{border:0;border-radius:0;padding:5px 10px;font-size:12px;font-weight:600;background:transparent;color:var(--muted)}
   .seg button.on{background:var(--accent);color:#04121c}
-  canvas.trend{height:140px;margin-top:4px}
+  canvas.trend{height:170px;margin-top:4px;cursor:zoom-in}
+  #tzoom{display:none;position:fixed;inset:0;z-index:45;background:var(--bg);padding:12px 16px;flex-direction:column;gap:10px}
+  #tzoom.on{display:flex}
+  body.overheat #tzoom{animation:ohbg 1s infinite}
+  .tz-head{display:flex;align-items:center;gap:12px} .tz-head b{font-size:20px}
+  .tz-head .seg button{font-size:15px;padding:7px 14px}
+  #c-zoom{flex:1;width:100%;height:auto;min-height:0;margin:0;cursor:zoom-out}
   .livefuel{font-size:40px;color:var(--ok)}
   @media (max-width:480px){ .livefuel{font-size:34px} }
   #intro{margin-bottom:12px}
@@ -361,6 +367,9 @@
   </div>
 </div></div>
 
+<div id="tzoom"><div class="tz-head"><b id="tz-title"></b><span class="sub">tap the graph to close</span><span class="spacer"></span>
+  <div class="seg" id="tz-seg"><button data-r="600">10 min</button><button data-r="1800">30 min</button><button data-r="0">Trip</button></div>
+  <button id="tz-close">✕ Close</button></div><canvas id="c-zoom"></canvas></div>
 <div id="ohbanner">⚠ ENGINE HOT <span id="oh-temp"></span><small>Ease off · A/C off · heater full hot · pull over safely if it keeps rising<br>(tap to hide this box — the red screen stays until it cools)</small></div>
 
 <div class="card" id="intro">
@@ -419,7 +428,7 @@
       <canvas id="c-speed" class="trend"></canvas>
     </div>
   </div>
-  <div class="legend"><span><i style="background:var(--muted)"></i>dashed = trip average</span><span>gaps = stopped / idling</span></div>
+  <div class="legend"><span><i style="background:var(--muted)"></i>dashed = trip average</span><span>gaps = stopped / idling</span><span>tap a graph to enlarge</span></div>
   <div id="notes" class="notes"></div>
 </div>
 
@@ -952,7 +961,7 @@ function drawChart(){
   if (hist.length >= 2){
     const t0 = hist[hist.length-1].t - 600;
     for (const [k,c,sc] of [["speed","#3fb6ff",1],["coolant","#ff7a45",1],["rpm","#b37feb",1/50]]){
-      cx.strokeStyle = c; cx.lineWidth = 2; cx.beginPath(); let started = false;
+      cx.strokeStyle = c; cx.lineWidth = 3; cx.lineJoin = "round"; cx.beginPath(); let started = false;
       for (const h of hist){
         if (h[k] == null) continue;
         const x = (h.t - t0)/600*W, y = H - 4 - Math.min(160, h[k]*sc)/160*(H-8);
@@ -961,12 +970,30 @@ function drawChart(){
       cx.stroke();
     }
   }
-  cx.fillStyle = "#8693a1"; cx.font = "10px -apple-system,sans-serif";
+  cx.fillStyle = "#a3afbd"; cx.font = "600 13px -apple-system,sans-serif";
   cx.fillText("160", 4, 14); cx.fillText("0", 4, H-6);
 }
 
 // ---- Trends: km/L and speed over time
 let trendRange = 600;   // seconds; 0 = whole trip
+let zoomKey = null;     // "kmpl" | "speed" while a graph is shown full screen
+function openZoom(k){
+  zoomKey = k; $("tzoom").classList.add("on");
+  $("tz-title").textContent = k === "kmpl" ? "Fuel economy · km/L" : "Speed · km/h";
+  for (const x of document.querySelectorAll("#tz-seg button")) x.classList.toggle("on", +x.dataset.r === trendRange);
+  requestAnimationFrame(drawTrends);
+}
+function closeZoom(){ zoomKey = null; $("tzoom").classList.remove("on"); }
+$("c-kmpl").addEventListener("click", () => openZoom("kmpl"));
+$("c-speed").addEventListener("click", () => openZoom("speed"));
+$("tz-close").addEventListener("click", closeZoom);
+$("c-zoom").addEventListener("click", closeZoom);
+$("tz-seg").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  trendRange = +b.dataset.r;
+  for (const x of document.querySelectorAll("#tz-seg button, #trend-seg button")) x.classList.toggle("on", +x.dataset.r === trendRange);
+  drawTrends();
+});
 document.getElementById("trend-seg").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   trendRange = +b.dataset.r;
@@ -991,48 +1018,63 @@ function drawTrend(cv, buckets, key, color, ref, unit, minMax, step){
   if (!W) return;
   if (cv.width !== Math.round(W*dpr) || cv.height !== Math.round(H*dpr)){ cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr); }
   ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,W,H);
-  const L = 30, R = 6, T = 6, Bm = 18, pw = W-L-R, ph = H-T-Bm;
+  const big = H > 260, F = big ? 18 : 13, LW = big ? 5 : 3.5;
+  const L = big ? 52 : 36, R = big ? 64 : 44, T = big ? 14 : 8, Bm = big ? 30 : 22, pw = W-L-R, ph = H-T-Bm;
   const vals = buckets.map(b => b[key]).filter(v => v != null);
   const ymax = Math.max(minMax, Math.ceil(Math.max(0, ...vals, ref || 0)/step)*step);
   const y = v => T + ph - v/ymax*ph, x = i => L + (i+0.5)/buckets.length*pw;
-  ctx.font = "10px -apple-system,sans-serif"; ctx.fillStyle = "#8693a1"; ctx.strokeStyle = "#232a32"; ctx.lineWidth = 1;
+  ctx.font = `600 ${F}px -apple-system,sans-serif`; ctx.fillStyle = "#a3afbd"; ctx.strokeStyle = "#2a323c"; ctx.lineWidth = 1;
   for (let v = 0; v <= ymax + 1e-9; v += step){
     ctx.beginPath(); ctx.moveTo(L, y(v)); ctx.lineTo(W-R, y(v)); ctx.stroke();
-    ctx.textAlign = "right"; ctx.fillText(String(v), L-5, y(v)+3);
+    ctx.textAlign = "right"; ctx.fillText(String(v), L-6, y(v)+F*.35);
   }
   if (!buckets.length) return;
   const t0 = buckets[0].t, t1 = buckets[buckets.length-1].t, clock = t => new Date(t*1000).toTimeString().slice(0,5);
-  ctx.textAlign = "left"; ctx.fillText(clock(t0), L, H-4);
-  ctx.textAlign = "right"; ctx.fillText(clock(t1), W-R, H-4);
+  ctx.textAlign = "left"; ctx.fillText(clock(t0), L, H-6);
+  ctx.textAlign = "right"; ctx.fillText(clock(t1), W-R, H-6);
   if (!vals.length){ ctx.textAlign = "center"; ctx.fillText("no data yet — start driving", L+pw/2, T+ph/2); return; }
   // area + line, broken where there is no value
-  ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.fillStyle = color + "22";
+  ctx.strokeStyle = color; ctx.lineWidth = LW; ctx.lineJoin = "round"; ctx.lineCap = "round"; ctx.fillStyle = color + "38";
   let run = [];
   const flush = () => {
     if (!run.length) return;
     ctx.beginPath(); run.forEach(([px,py], k) => k ? ctx.lineTo(px,py) : ctx.moveTo(px,py)); ctx.stroke();
     ctx.lineTo(run[run.length-1][0], y(0)); ctx.lineTo(run[0][0], y(0)); ctx.closePath(); ctx.fill();
-    if (run.length === 1){ ctx.beginPath(); ctx.arc(run[0][0], run[0][1], 2, 0, 7); ctx.fillStyle = color; ctx.fill(); ctx.fillStyle = color + "22"; }
+    if (run.length === 1){ ctx.beginPath(); ctx.arc(run[0][0], run[0][1], LW, 0, 7); ctx.fillStyle = color; ctx.fill(); ctx.fillStyle = color + "38"; }
     run = [];
   };
   buckets.forEach((b, i) => { if (b[key] == null) flush(); else run.push([x(i), y(b[key])]); });
   flush();
+  // latest value: dot + number at the right end
+  let li = buckets.length - 1; while (li >= 0 && buckets[li][key] == null) li--;
+  if (li >= 0){
+    const lx = x(li), ly = y(buckets[li][key]);
+    ctx.beginPath(); ctx.arc(lx, ly, LW + 2, 0, 7); ctx.fillStyle = color; ctx.fill();
+    ctx.font = `800 ${F + 2}px -apple-system,sans-serif`; ctx.textAlign = "left";
+    ctx.fillText(buckets[li][key].toFixed(key === "kmpl" ? 1 : 0), Math.min(lx + 8, W - R + 4), Math.max(T + F, Math.min(T + ph, ly + F * .35)));
+    ctx.font = `600 ${F}px -apple-system,sans-serif`;
+  }
   if (ref){
-    ctx.setLineDash([5,4]); ctx.strokeStyle = "#8693a1"; ctx.lineWidth = 1.2;
+    ctx.setLineDash([7,5]); ctx.strokeStyle = "#a3afbd"; ctx.lineWidth = 1.6;
     ctx.beginPath(); ctx.moveTo(L, y(ref)); ctx.lineTo(W-R, y(ref)); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = "#c9d2db"; ctx.textAlign = "left"; ctx.fillText(`avg ${ref.toFixed(1)} ${unit}`, L+4, y(ref)-4);
+    ctx.fillStyle = "#dfe6ee"; ctx.textAlign = "left"; ctx.fillText(`avg ${ref.toFixed(1)} ${unit}`, L+6, y(ref)-6);
   }
 }
 function drawTrends(){
   const now = series.length ? series[series.length-1].t : Date.now()/1000;
   const t0 = trendRange ? now - trendRange : (series.length ? series[0].t : now - 60);
   const pts = series.filter(p => p.t >= t0);
-  const cvK = $("c-kmpl"), n = Math.max(10, Math.min(120, Math.floor((cvK.clientWidth || 300)/5)));
+  const cvK = $("c-kmpl"), n = Math.max(10, Math.min(60, Math.floor((cvK.clientWidth || 300)/9)));
   const buckets = bucketize(pts, t0, now, n);
   const tr = state.trip || {};
   const moving = pts.filter(p => p.s >= 3), avgSpeed = moving.length ? moving.reduce((a,p) => a+p.s, 0)/moving.length : null;
   drawTrend(cvK, buckets, "kmpl", "#3ddc84", tr.avg_kmpl, "km/L", 15, 5);
   drawTrend($("c-speed"), buckets, "speed", "#3fb6ff", avgSpeed, "km/h", 60, 20);
+  if (zoomKey){   // full-screen graph
+    const cz = $("c-zoom"), bz = bucketize(pts, t0, now, Math.max(20, Math.min(90, Math.floor((cz.clientWidth || 800)/12))));
+    if (zoomKey === "kmpl") drawTrend(cz, bz, "kmpl", "#3ddc84", tr.avg_kmpl, "km/L", 15, 5);
+    else drawTrend(cz, bz, "speed", "#3fb6ff", avgSpeed, "km/h", 60, 20);
+  }
   const kv = buckets.map(b => b.kmpl).filter(v => v != null);
   $("t-kmpl-note").textContent = kv.length ? `best ${Math.max(...kv).toFixed(1)} · worst ${Math.min(...kv).toFixed(1)}` : "";
   $("t-speed-note").textContent = pts.length ? `max ${Math.max(...pts.map(p => p.s)).toFixed(0)}${avgSpeed ? ` · avg moving ${avgSpeed.toFixed(0)}` : ""}` : "";
