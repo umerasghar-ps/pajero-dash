@@ -354,7 +354,7 @@
           <div><b id="p-trip">--</b><span id="p-triptime">Trip km</span></div>
         </div>
       </section>
-      <section class="pc" id="p-gear"><span class="lbl ttl" style="color:var(--p-blue)">Gear</span><span class="num" id="p-g">-</span><small id="p-gs">AUTO</small><small style="font-size:10px;letter-spacing:1px;color:var(--p-dim)">estimated</small></section>
+      <section class="pc tap" id="p-gear" title="Tap to set the number of gears"><span class="lbl ttl" style="color:var(--p-blue)">Gear</span><span class="num" id="p-g">-</span><small id="p-gs">AUTO</small><small id="p-gnote" style="font-size:10px;letter-spacing:1px;color:var(--p-dim)">estimated</small></section>
       <section class="pc" id="p-trim">
         <span class="lbl ttl" style="color:var(--p-amber)">Fuel trim</span>
         <div class="trimrow"><span>LONG TERM</span><b id="p-ltft">--</b></div><div class="trimbar"><i id="p-ltftbar"></i></div>
@@ -1471,14 +1471,57 @@ window.PRO = (() => {
   const bAmb  = makeBar($("p-bamb"),  { min: 0, max: 60, step: 10, red: 50, c1: "#ff4f95", c2: "#ff8ab8", labels: 1, icon: "☀" });
   const bTank = makeBar($("p-btank"), { min: 0, max: 100, step: 20, red: 999, c1: "#ffb020", c2: "#3ddc84", x: 34, bw: 14 });
 
-  // gear estimate (Pajero 3.8 5-speed auto; km/h per 1000 rpm — calibrate on the road)
-  const KMH_PER_1000 = [9.3, 17.1, 25.2, 35.3, 49.7];
+  // ---- gear estimate: speed ÷ rpm. Each gear has a fixed km/h per 1000 rpm.
+  // Starts from book values, then LEARNS this car's real values from steady driving (saved on the device).
+  const GEAR_DEFAULTS = { 4: [11.8, 22.5, 33.6, 46.0],            // 4-speed auto (Pajero 3.0 V6 class)
+                          5: [9.3, 17.1, 25.2, 35.3, 49.7] };      // 5-speed auto (Pajero 3.8 class)
+  const GKEY = "pajero.gears.v1";
+  let G = (() => { try { return JSON.parse(localStorage.getItem(GKEY)) || null; } catch { return null; } })() || { n: 4, hist: {}, learned: [] };
+  const saveG = () => { try { localStorage.setItem(GKEY, JSON.stringify(G)); } catch {} };
+  let lastLearn = 0, prevSpd = null, nLearn = 0;
+  function learn(speed, rpm){
+    const now = Date.now() / 1000; if (now - lastLearn < 1) return; lastLearn = now;
+    const steady = prevSpd != null && Math.abs(speed - prevSpd) < 1.5; prevSpd = speed;
+    if (!steady || speed < 12 || rpm < 1000) return;          // cruising only: no shifting, converter not slipping much
+    const b = Math.round(speed / (rpm / 1000) * 4);            // 0.25 km/h-per-1000rpm bins
+    G.hist[b] = (G.hist[b] || 0) + 1;
+    if (++nLearn % 10 === 0) findPeaks();
+    if (nLearn % 30 === 0) saveG();
+  }
+  function findPeaks(){
+    const keys = Object.keys(G.hist).map(Number); if (!keys.length) return;
+    const lo = Math.min(...keys), hi = Math.max(...keys), sm = {};
+    for (let b = lo; b <= hi; b++){ let t = 0; for (let d = -2; d <= 2; d++) t += G.hist[b + d] || 0; sm[b] = t; }
+    const cands = [];
+    for (let b = lo; b <= hi; b++) if (sm[b] >= 15 && sm[b] >= (sm[b - 1] || 0) && sm[b] > (sm[b + 1] || 0)) cands.push([b / 4, sm[b]]);
+    cands.sort((a, b) => b[1] - a[1]);
+    const pick = [];
+    for (const [k] of cands){ if (pick.length >= G.n) break; if (pick.every(p => Math.abs(Math.log(k / p)) > .165)) pick.push(k); }
+    G.learned = pick.sort((a, b) => a - b);
+  }
+  function ratios(){
+    const d = GEAR_DEFAULTS[G.n].slice(), L = G.learned || [];
+    if (L.length === G.n) return L;                             // fully calibrated
+    for (const k of L){ let bi = 0, be = 1e9; d.forEach((g, i) => { const e = Math.abs(Math.log(k / g)); if (e < be){ be = e; bi = i; } }); d[bi] = k; }
+    return d;
+  }
   function gearOf(speed, rpm){
     if (speed < 3) return "N"; if (!rpm || rpm < 500) return "-";
-    const k = speed / (rpm / 1000); let best = 0, err = 1e9;
-    KMH_PER_1000.forEach((g, i) => { const e = Math.abs(Math.log(k / g)); if (e < err){ err = e; best = i; } });
-    return err < .18 ? String(best + 1) : "-";
+    const k = speed / (rpm / 1000), R = ratios(); let best = 0, err = 1e9;
+    R.forEach((g, i) => { const e = Math.abs(Math.log(k / g)); if (e < err){ err = e; best = i; } });
+    return err < .15 ? String(best + 1) : "-";                  // "-" = shifting / converter slipping
   }
+  function gearNote(){ const L = (G.learned || []).length;
+    return L >= G.n ? `${G.n}-speed · calibrated` : `${G.n}-speed · learning ${L}/${G.n}`; }
+  $("p-gear").addEventListener("click", () => {
+    const a = prompt(`How many forward gears does your automatic gearbox have? (4 or 5)\nNow: ${G.n}\n\nThe app learns the exact ratios by itself while you cruise steadily in each gear.`, G.n);
+    if (a === null) return;
+    const n = parseInt(a, 10);
+    if (n !== 4 && n !== 5){ alert("Not changed: enter 4 or 5."); return; }
+    const reset = n !== G.n || confirm("Also forget the learned gear ratios and start learning again?");
+    G.n = n; if (reset){ G.hist = {}; G.learned = []; }
+    findPeaks(); saveG(); render();
+  });
 
   let vacMax = 0;
   const ico = (id, cls) => { const c = "ico " + (cls || ""); if ($(id).className !== c) $(id).className = c; };
@@ -1517,7 +1560,8 @@ window.PRO = (() => {
     txt("p-range", fuel.left != null ? String(Math.round(fuel.left * kmpl)) : "--");
     txt("p-trip", tr.dist_km != null ? fmt(tr.dist_km, 1) : "--"); txt("p-triptime", `Trip km · ${hms(tr.elapsed_s)}`.replace("Trip km", "km"));
     // gear
-    const g = gearOf(v.speed || 0, v.rpm || 0); txt("p-g", g); txt("p-gs", g === "N" ? "STOPPED" : "AUTO");
+    if (st.connected && !st.demo && v.speed != null && v.rpm != null) learn(v.speed, v.rpm);
+    const g = gearOf(v.speed || 0, v.rpm || 0); txt("p-g", g); txt("p-gs", g === "N" ? "STOPPED" : "AUTO"); txt("p-gnote", gearNote());
     // trims
     const trim = (k) => { const x = v[k]; if (x == null) return; txt("p-" + k, `${x > 0 ? "+" : ""}${fmt(x, 1)}%`);
       const b = $("p-" + k + "bar"); b.style.left = (x >= 0 ? 50 : 50 + Math.max(-25, x) * 2) + "%"; b.style.width = Math.min(50, Math.abs(x) * 2) + "%";
@@ -1565,7 +1609,7 @@ window.PRO = (() => {
   const q = new URLSearchParams(location.search).get("view");
   let pref = null; try { pref = localStorage.getItem(VIEW_KEY); } catch {}
   setView(q === "pro" || q === "classic" ? q : pref || "classic");
-  return { render };
+  return { render, _learn: learn, _G: () => G, _resetTest: () => { lastLearn = 0; } };
 })();
 setInterval(render, 250);
 </script>
