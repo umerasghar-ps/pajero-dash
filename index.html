@@ -115,6 +115,19 @@
   #ohbanner small{display:block;font-size:14px;font-weight:600;margin-top:6px}
   body.overheat #ohbanner{display:block}
   body.overheat.ohhide #ohbanner{display:none}
+  /* ---- speed alert: flashing amber frame + top banner (does not cover the gauges) */
+  #spbanner{display:none;position:fixed;left:50%;bottom:10px;transform:translateX(-50%);z-index:55;align-items:center;gap:14px;
+    background:#c2410c;color:#fff;border:2px solid #fff;border-radius:14px;padding:8px 10px 8px 18px;font-weight:800;font-size:24px;
+    box-shadow:0 8px 30px #000a;white-space:nowrap;animation:spflash .7s infinite}
+  #spbanner small{font-size:14px;font-weight:600;opacity:.9}
+  #spbanner button,#ohbanner button{font:700 15px/1 inherit;font-family:inherit;color:#111;background:#fff;border:0;border-radius:9px;padding:9px 12px;cursor:pointer}
+  #ohbanner button{margin-top:10px}
+  body.overspeed #spbanner{display:flex}
+  body.overspeed::after{content:"";position:fixed;inset:0;z-index:54;pointer-events:none;border:8px solid #ff7a1a;animation:spframe .7s infinite}
+  @keyframes spflash{50%{background:#ea580c}}
+  @keyframes spframe{50%{border-color:#ff7a1a33}}
+  body.overspeed #v-speed, body.overspeed #p-spd{color:#ff7a1a}
+
   .wt-v{white-space:nowrap} .wt-v b{font-size:18px}
   .wt-p,.wt-t{color:var(--muted);white-space:nowrap;font-size:12px}
   .wt.cold #wt-fill{background:var(--accent)}
@@ -310,7 +323,7 @@
   </div>
 
   <div id="p-main">
-    <section class="pc" id="p-speed">
+    <section class="pc tap" id="p-speed" title="Tap to set the speed alert">
       <svg id="p-arc" width="484" height="222"></svg>
       <div class="rpmv num" id="p-rpm">0</div><div class="rpmu">rpm</div>
       <div class="num" id="p-spd">0</div><div class="spdu">km/h</div>
@@ -370,7 +383,8 @@
 <div id="tzoom"><div class="tz-head"><b id="tz-title"></b><span class="sub">tap the graph to close</span><span class="spacer"></span>
   <div class="seg" id="tz-seg"><button data-r="600">10 min</button><button data-r="1800">30 min</button><button data-r="0">Trip</button></div>
   <button id="tz-close">✕ Close</button></div><canvas id="c-zoom"></canvas></div>
-<div id="ohbanner">⚠ ENGINE HOT <span id="oh-temp"></span><small>Ease off · A/C off · heater full hot · pull over safely if it keeps rising<br>(tap to hide this box — the red screen stays until it cools)</small></div>
+<div id="ohbanner">⚠ ENGINE HOT <span id="oh-temp"></span><small>Ease off · A/C off · heater full hot · pull over safely if it keeps rising<br>(tap to hide this box — the red screen stays until it cools)</small><button id="oh-mute">🔇 Stop sound</button></div>
+<div id="spbanner">⚠ SLOW DOWN <span id="sp-val"></span><small id="sp-lim"></small><button id="sp-mute">🔇 Stop sound</button></div>
 
 <div class="card" id="intro">
   <b>Phone-only dashboard.</b>
@@ -685,6 +699,7 @@ function update(vals){
   const now = Date.now()/1000, v = state.values;
   Object.assign(v, vals);
   if (vals.coolant != null) state.coolantAt = now;
+  if (vals.speed != null) state.valuesAt = now;
   const speed = v.speed || 0, lam = v.lambda || 1;
   const lph = v.maf != null ? v.maf*3600/(STOICH*lam*PETROL_DENSITY) : null;
   v.lph = lph != null ? +lph.toFixed(2) : null;
@@ -914,7 +929,7 @@ function startDemo(){
   const t0 = Date.now()/1000; let cool = 45;
   demoTimer = setInterval(() => {
     const t = Date.now()/1000 - t0;
-    const speed = Math.max(0, 60 + 50*Math.sin(t/15) + (Math.random()-.5)*4);
+    const speed = Math.max(0, 66 + 62*Math.sin(t/15) + (Math.random()-.5)*4);   // peaks ~128 to show the speed alert
     const rpm = 750 + speed*28 + (Math.random()-.5)*80, thr = Math.max(5, Math.min(80, 15 + 20*Math.cos(t/15)));
     cool = Math.min(91, cool + 0.15);
     update({ rpm:Math.round(rpm), speed:Math.round(speed), maf:+(rpm*thr/4000+3).toFixed(2), throttle:+thr.toFixed(1),
@@ -1129,18 +1144,73 @@ function renderWater(c){
   const hot = c >= wt.hot;
   if (hot){
     box.classList.add("hot");
-    if (now - lastBeep > 6 && !state.demo){ lastBeep = now; beep(); }
+    if (now - lastBeep > 6 && !state.demo && !wtMuted){ lastBeep = now; beep(); }
   } else if (c >= wt.warn || (wtRate != null && wtRate >= 3 && c >= wt.hot - 8)) box.classList.add("warn");
   else if (c < 70) box.classList.add("cold");
   $("oh-temp").textContent = `${c} °C`;
   setOverheat(hot);
 }
 // whole screen red while over the limit; it clears by itself once the needle drops back
+let wtMuted = false;           // "Stop sound" on the ENGINE HOT box: silent until it cools, then re-arms
 function setOverheat(on){
-  if (!on) document.body.classList.remove("ohhide");
+  if (!on){ document.body.classList.remove("ohhide"); wtMuted = false; }
   document.body.classList.toggle("overheat", on);
 }
 $("ohbanner").addEventListener("click", () => document.body.classList.add("ohhide"));
+$("oh-mute").addEventListener("click", e => { e.stopPropagation(); wtMuted = true; $("oh-mute").textContent = "🔇 Sound off"; });
+
+// ---- speed alert (default 120 km/h). Banner + flashing frame + beep; "Stop sound" silences it until you slow down.
+const SP_KEY = "pajero.speedalert.v1";
+let sp = (() => { try { return JSON.parse(localStorage.getItem(SP_KEY)) || null; } catch { return null; } })() || { limit: 120, sound: true };
+let spOn = false, spMuted = false, spLastBeep = 0;
+function speedBeep(){
+  try {
+    if (!audioCtx) return;
+    for (const [at, f] of [[0, 1200], [0.15, 1200]]){
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.frequency.value = f; o.type = "triangle"; g.gain.value = 0.25;
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(audioCtx.currentTime + at); o.stop(audioCtx.currentTime + at + 0.1);
+    }
+  } catch {}
+}
+function speedAlert(speed){
+  const live = state.connected && (state.demo || (Date.now()/1000 - (state.valuesAt || 0) < 10));
+  if (!sp.limit || speed == null || !live){ if (spOn) setSpeedAlert(false); return; }
+  if (!spOn && speed > sp.limit) setSpeedAlert(true);
+  else if (spOn && speed <= sp.limit - 3) setSpeedAlert(false);     // 3 km/h margin so it doesn't flicker at the limit
+  if (spOn){
+    $("sp-val").textContent = `${Math.round(speed)} km/h`;
+    const now = Date.now()/1000;
+    if (sp.sound && !spMuted && now - spLastBeep > 3){ spLastBeep = now; speedBeep(); }
+  }
+}
+function setSpeedAlert(on){
+  spOn = on; document.body.classList.toggle("overspeed", on);
+  if (!on){ spMuted = false; $("sp-mute").textContent = "🔇 Stop sound"; }
+  $("sp-lim").textContent = `limit ${sp.limit}`;
+  $("sp-mute").style.display = sp.sound ? "" : "none";
+}
+$("sp-mute").addEventListener("click", () => { spMuted = true; $("sp-mute").textContent = "🔇 Sound off"; });
+function setSpeedLimit(){
+  primeAudio();
+  const a = prompt(`Speed alert: warn above how many km/h?
+(enter 0 to switch the speed alert off)
+Now: ${sp.limit ? sp.limit + " km/h" : "off"}`, sp.limit || 120);
+  if (a === null) return;
+  const v = parseFloat(a);
+  if (!(v === 0 || (v >= 30 && v <= 250))){ alert("Not changed: enter 30–250 km/h, or 0 for off."); return; }
+  sp.limit = v;
+  if (v) sp.sound = confirm(`Speed alert at ${v} km/h.
+
+Play a beep too?
+OK = beep + flashing screen
+Cancel = flashing screen only (no sound)`);
+  try { localStorage.setItem(SP_KEY, JSON.stringify(sp)); } catch {}
+  if (spOn) setSpeedAlert(false);
+  render();
+}
+$("v-speed").parentElement.addEventListener("click", setSpeedLimit);
 $("wt").addEventListener("click", () => {
   primeAudio();
   const a = prompt(`Turn the screen RED at what water temperature (°C)?\n\nYour car normally runs about 90–98 °C (dash needle in the middle).\nOverheating starts around 105–110 °C. Now set to ${wtRedC} °C.`, wtRedC);
@@ -1199,6 +1269,7 @@ function render(){
   $("s-coolant").textContent = v.coolant == null ? "" : v.coolant < 70 ? "warming up — go easy" : v.coolant < wt.warn ? "normal" : "HOT";
   tile("t-coolant", v.coolant >= wt.hot ? "bad" : v.coolant >= wt.warn ? "warn" : null);
   renderWater(v.coolant);
+  speedAlert(v.speed);
 
   const running = (v.rpm||0) > 400;
   $("v-volts").textContent = fmt(v.volts, 2);
@@ -1481,6 +1552,7 @@ window.PRO = (() => {
   $("p-tank").onclick = () => $("btn-setfuel").click();
   $("p-eco").onclick = () => $("btn-resettrip").click();
   $("p-classic").onclick = () => setView("classic");
+  $("p-speed").onclick = setSpeedLimit;
   $("p-demobtn").onclick = () => { primeAudio(); startDemo(); render(); };
 
   const VIEW_KEY = "pajero.view";
